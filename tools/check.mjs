@@ -11,6 +11,8 @@ import * as M from '../app/js/model.js';
 import * as S from '../app/js/samples.js';
 import { APP_VERSION } from '../app/js/version.js';
 import { parseData } from '../app/js/storage.js';
+import * as C from '../app/js/check.js';
+import * as R from '../app/js/rules.js';
 
 const results = [];
 const check = (name, problems) => results.push({ name, problems });
@@ -212,6 +214,203 @@ const check = (name, problems) => results.push({ name, problems });
     problems.push(`エラーになった: ${e.message}`);
   }
   check('スキルを消す（日ごとに要るスキルがあるとき）', problems);
+}
+
+// 11. 数え方の小さな例（docs/数え方の表.md 第2版。確かめ役と決めた A・B・C と相談の答え）
+{
+  const problems = [];
+  const expect = (name, got, want) => {
+    if (JSON.stringify(got) !== JSON.stringify(want)) problems.push(`${name}: ${JSON.stringify(got)}（期待 ${JSON.stringify(want)}）`);
+  };
+  // 2026年11月（1日は日曜、7日は土曜）。早・遅・夜の3つ、スタッフ1人、公休数0
+  const base = () => {
+    const d = M.emptyData(2026, 11, 'blank');
+    d.settings.ranks = [M.newRank(d, '上'), M.newRank(d, '下')];
+    const zero = { full: 0, part: 0, all: 0 };
+    const E = M.newShift(d, { symbol: '早', name: '早', group: 'early', need: { ...zero } });
+    const L = M.newShift(d, { symbol: '遅', name: '遅', group: 'late', need: { ...zero } });
+    const N = M.newShift(d, { symbol: '夜', name: '夜', group: 'night', night: true, need: { ...zero } });
+    d.settings.shifts = [E, L, N];
+    const p = M.newStaff(d, { name: 'A', shifts: [E.id, L.id, N.id], rank: d.settings.ranks[1].id, offDays: 0, paidDays: 0, prevLastShift: null, prevConsecutive: 0 });
+    d.staff = [p];
+    return { d, E, L, N, p };
+  };
+  const put = (d, pid, seq, start = 1) => seq.forEach((v, i) => { if (v) (d.month.table[pid] ??= {})[start + i] = v; });
+  const S = (s) => ({ kind: 'shift', shift: s.id });
+  const K = (k) => ({ kind: k });
+  const n = (d, rule) => C.checkTable(d).byRule[rule].count;
+
+  // A：半休・明けをはさむ組は作らない
+  for (const [name, seq, want] of [
+    ['遅→半休→早', (x) => [S(x.L), K('half'), S(x.E)], 0],
+    ['遅→遅→半休→早→早', (x) => [S(x.L), S(x.L), K('half'), S(x.E), S(x.E)], 0],
+    ['遅→（手で入れた）明け→早', (x) => [S(x.L), K('ake'), S(x.E)], 0],
+    ['遅→早', (x) => [S(x.L), S(x.E)], 1],
+  ]) {
+    const x = base();
+    put(x.d, x.p.id, seq(x));
+    expect(`A ${name} の遅い→早い`, n(x.d, 'lateToEarly'), want);
+  }
+  {
+    const x = base();
+    x.d.settings.work.maxSwitches = 0;
+    put(x.d, x.p.id, [S(x.E), S(x.L), K('half'), S(x.L), K('off'), S(x.E)]);
+    expect('A 切り替えの回数は半休・休みを飛ばして数える（早→遅→遅→早で2回）', C.checkTable(x.d).byRule.switchCount.amount, 2);
+  }
+  // B：連休は公休・有給・余り日の続きで数え、明けを入れない
+  const careSeq = (x, lastRun = true) => {
+    const block = [S(x.N), K('ake'), K('off'), S(x.E), S(x.E)];
+    return [...block, ...block, ...block, ...block, S(x.N), K('ake'), K('off'), K('off'), S(x.E), S(x.E), S(x.E), S(x.E), ...(lastRun ? [K('off'), K('off')] : [S(x.E), S(x.E)])];
+  };
+  {
+    const x = base();
+    x.p.offDays = 7;
+    x.p.restStyle = 'together';
+    put(x.d, x.p.id, careSeq(x));
+    const r = C.checkTable(x.d);
+    expect('B 介護の並び（連休2回）で「連休にしたい」人の連休の回数が足りない', r.byRule.fewRestRuns.count, 0);
+    expect('B 夜勤→明け→公休→早 の公休は1日だけの休みにならない', r.byRule.singleOff.count, 0);
+    const y = base();
+    y.p.offDays = 7;
+    y.p.restStyle = 'together';
+    put(y.d, y.p.id, careSeq(y, false));
+    expect('B 月末の連休を外すと、連休は1回（足りないのは1回）', C.checkTable(y.d).byRule.fewRestRuns.amount, 1);
+    const z = base();
+    z.p.offDays = 7;
+    z.p.restStyle = 'spread';
+    put(z.d, z.p.id, careSeq(z));
+    expect('B「ばらしたい」人の 夜勤→明け→公休→公休 は休み方の希望と合わない、にならない', C.checkTable(z.d).byRule.restStyle.count, 0);
+  }
+  // C：人員不足・定数オーバーは1日・1シフトで1件
+  {
+    const x = base();
+    x.E.need = { full: 1, part: 1, all: 2 };
+    const q = M.newStaff(x.d, { name: 'B', employment: 'part', shifts: [x.E.id], offDays: 0, paidDays: 0 });
+    const r2 = M.newStaff(x.d, { name: 'C', employment: 'part', shifts: [x.E.id], offDays: 0, paidDays: 0 });
+    x.p.employment = 'full';
+    x.d.staff.push(q, r2);
+    put(x.d, q.id, [S(x.E)]);
+    put(x.d, r2.id, [S(x.E)]);
+    put(x.d, x.p.id, [K('off')]);
+    const r = C.checkTable(x.d);
+    const day1 = (rule) => r.items.filter((it) => it.rule === rule && it.day === 1 && it.shift === x.E.id).map((it) => it.amount);
+    expect('C 社員が1人足りず、パートが1人多い日の人員不足', day1('shortage'), [1]);
+    expect('C 同じ日の定数オーバー', day1('overstaff'), [1]);
+  }
+  // 相談1：希望と違う（ぴったり同じかで見る）
+  {
+    const x = base();
+    x.d.month.requests[x.p.id] = { 2: { kind: 'off' } };
+    put(x.d, x.p.id, [S(x.E), K('paid')]);
+    expect('相談1 公休の希望の日に有給は「希望と違う」', n(x.d, 'requestDiff'), 1);
+    put(x.d, x.p.id, [S(x.E), K('off')]);
+    expect('相談1 同じなら0', n(x.d, 'requestDiff'), 0);
+    expect('相談1 強さは選べない（絶対）', C.checkTable(x.d).byRule.requestDiff.strength, 'hard');
+  }
+  // 相談2：遅い→早いの間の2連休が足りない（別の決まり。同じ組を両方に数えない）
+  {
+    const x = base();
+    x.p.twoOffAfterLateEarly = true;
+    put(x.d, x.p.id, [S(x.L), K('off'), S(x.E)]);
+    expect('相談2 2連休の人の 遅→休→早', [n(x.d, 'twoOffLateEarly'), n(x.d, 'lateOffEarly')], [1, 0]);
+    const y = base();
+    put(y.d, y.p.id, [S(y.L), K('off'), S(y.E)]);
+    expect('相談2 ほかの人の 遅→休→早', [n(y.d, 'twoOffLateEarly'), n(y.d, 'lateOffEarly')], [0, 1]);
+  }
+  // 相談5：土日の希望（11月7日は土曜）
+  {
+    const x = base();
+    x.p.weekendPref = 'off';
+    put(x.d, x.p.id, [S(x.E)], 7);
+    expect('相談5 土日は休みたい人の土曜の出勤', n(x.d, 'weekend'), 1);
+    const y = base();
+    y.p.weekendPref = 'work';
+    put(y.d, y.p.id, [K('off')], 7);
+    expect('相談5 土日に出たい人の土曜の休み', n(y.d, 'weekend'), 1);
+    put(y.d, y.p.id, [K('off')], 9);
+    expect('相談5 月曜の休みは見ない', n(y.d, 'weekend'), 1);
+  }
+  // 相談6：空の表は数えない
+  {
+    const x = base();
+    x.p.offDays = 9;
+    let r = C.checkTable(x.d);
+    expect('相談6 空の表', [r.tableEmpty, r.totals.hard, r.totals.soft, r.items.length], [true, 0, 0, 0]);
+    put(x.d, x.p.id, [S(x.E)]);
+    r = C.checkTable(x.d);
+    expect('相談6 1マスでも入っていれば数える', [r.tableEmpty, r.byRule.offShort.count], [false, 1]);
+  }
+  // 手順1のチェックと強さは1つの値
+  {
+    const x = base();
+    put(x.d, x.p.id, [S(x.L), S(x.E)]);
+    R.setStrength(x.d, 'lateToEarly', 'off');
+    expect('強さ「なし」でチェックも外れ、数えない', [x.d.settings.work.forbidLateToEarly, n(x.d, 'lateToEarly')], [false, 0]);
+    R.setStrength(x.d, 'lateToEarly', 'soft');
+    expect('強さを選ぶとチェックも入る', [x.d.settings.work.forbidLateToEarly, R.strengthOf(x.d, 'lateToEarly')], [true, 'soft']);
+    x.d.settings.work.avoidSingleOff = false;
+    expect('チェックを外すと強さは「なし」', R.strengthOf(x.d, 'singleOff'), 'off');
+  }
+  // 6連勤以上と連勤超過（前の月から続く）・夜勤の次の日
+  {
+    const x = base();
+    x.p.prevConsecutive = 3;
+    x.p.prevLastShift = x.E.id;
+    put(x.d, x.p.id, [S(x.E), S(x.E), S(x.E), K('off')]);
+    const r = C.checkTable(x.d);
+    const six = r.items.find((it) => it.rule === 'sixPlus');
+    expect('前の月から続く6連勤（始まりは -2）', six && [six.from, six.to, six.amount], [-2, 3, 6]);
+    expect('連勤超過の超えた日数（上限5日）', r.byRule.overStreak.amount, 1);
+    const y = base();
+    put(y.d, y.p.id, [S(y.N), S(y.E)]);
+    expect('夜勤の次の日が出勤', n(y.d, 'nightNext'), 1);
+    const z = base();
+    z.p.prevLastShift = z.N.id;
+    z.p.prevConsecutive = 1;
+    put(z.d, z.p.id, [K('ake')]);
+    expect('前の月の最後が夜勤で、1日が明け', n(z.d, 'nightNext'), 0);
+  }
+  // 責任者の順位（いちばん上の人が2人以上なら、だれか1人が役に入っていればよい）
+  {
+    const x = base();
+    const role = M.newShift(x.d, { symbol: '責', name: '責任者', group: 'early', onePerDay: true, need: { full: 0, part: 0, all: 0 } });
+    x.d.settings.shifts.push(role);
+    const [top, low] = x.d.settings.ranks.map((r) => r.id);
+    const b = M.newStaff(x.d, { name: 'B', rank: top, shifts: [x.E.id, role.id], offDays: 0, paidDays: 0 });
+    const c = M.newStaff(x.d, { name: 'C', rank: top, shifts: [x.E.id, role.id], offDays: 0, paidDays: 0 });
+    x.d.staff.push(b, c);
+    x.p.rank = low;
+    put(x.d, x.p.id, [S(role)]);
+    put(x.d, b.id, [S(x.E)]);
+    expect('順位が下の人が役に入り、上の人が早にいる', n(x.d, 'leaderRank'), 1);
+    put(x.d, x.p.id, [S(x.E)]);
+    put(x.d, c.id, [S(role)]);
+    expect('いちばん上の順位の2人のうち1人が役に入っている', n(x.d, 'leaderRank'), 0);
+  }
+  // 良し悪しの比べ方
+  {
+    const x = base();
+    x.E.need = { full: 0, part: 0, all: 2 };
+    x.E.combine = true;
+    put(x.d, x.p.id, [S(x.E), S(x.E)]);
+    const before = C.checkTable(x.d);
+    const y = M.clone(x.d);
+    y.staff.push(M.newStaff(y, { name: 'B', shifts: [x.E.id], offDays: 0, paidDays: 0 }));
+    put(y, y.staff[1].id, [S(x.E)]);
+    const after = C.checkTable(y);
+    expect('人員不足が減れば改善', C.isImproved(before, after), true);
+    expect('同じなら改善ではない', C.isImproved(before, before), false);
+    const z = M.clone(x.d);
+    put(z, x.p.id, [S(x.E), S(x.E), S(x.E), S(x.E), S(x.E), S(x.E)]);
+    expect('6連勤以上が新しくできたら改善ではない', C.isImproved(before, C.checkTable(z)), false);
+    expect('並べる順で、良いほうが先', C.compareResults(after, before) < 0, true);
+  }
+  // 同じデータからは、いつも同じ結果
+  for (let seed = 1; seed <= 10; seed += 1) {
+    const d = await makeSample({ seed, withTable: true });
+    if (JSON.stringify(C.checkTable(d)) !== JSON.stringify(C.checkTable(M.clone(d)))) problems.push(`種 ${seed}: 同じデータで結果が変わる`);
+  }
+  check('数え方の小さな例（数え方の表 第2版）', problems);
 }
 
 // 10. 言葉の確かめ：一覧の言葉が、リポジトリのファイル・コミットの文に入っていないか

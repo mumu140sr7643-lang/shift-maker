@@ -2,10 +2,10 @@
 // キーボードで続けて入れられる：押すと数字が選ばれ、打つと置き換わる。
 // Enter で次の日、Shift+Enter で前の日、↑↓ で上下の行、Esc でやめる。
 // Shift を押しながら日を押す（なぞる）と何日か選べ、数字を打って Enter で全部に入る。
-import { h } from '../dom.js?v=1.3.2';
-import { app, commit } from '../state.js?v=1.3.2';
-import { needRows, needOn, setNeedOverride, shiftById, monthDays } from '../model.js?v=1.3.2';
-import { weekdayOf, WEEKDAY_LABELS } from '../calendar.js?v=1.3.2';
+import { h } from '../dom.js?v=2.1';
+import { app, commit } from '../state.js?v=2.1';
+import { needRows, needOn, setNeedOverride, shiftById, monthDays } from '../model.js?v=2.1';
+import { weekdayOf, WEEKDAY_LABELS } from '../calendar.js?v=2.1';
 
 function rowLabel(d, row) {
   const s = shiftById(d, row.shiftId);

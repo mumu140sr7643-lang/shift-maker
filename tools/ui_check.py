@@ -103,6 +103,9 @@ OVERFLOW_JS = "() => ({ sw: document.documentElement.scrollWidth, w: window.inne
 
 
 class QuietHandler(SimpleHTTPRequestHandler):
+    # つなぎ直しを減らす（何回も続けて動かすと、Windows で通信の空きが足りなくなることがあるため）
+    protocol_version = "HTTP/1.1"
+
     def log_message(self, *args):
         pass
 
