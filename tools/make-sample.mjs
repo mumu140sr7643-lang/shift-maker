@@ -1,5 +1,5 @@
 // 乱数で作り物の月を作る（本物のデータは読まない）。同じ種（--seed）なら毎回同じデータになる。
-// 使い方: node tools/make-sample.mjs --seed 3 [--staff 25] [--year 2026 --month 2] [--out ファイル]
+// 使い方: node tools/make-sample.mjs --seed 3 [--staff 25] [--year 2026 --month 2] [--with-table] [--out ファイル]
 import { writeFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { join } from 'node:path';
@@ -21,7 +21,7 @@ export function rng(seed) {
   };
 }
 
-export async function makeSample({ seed, staff = null, year = null, month = null, root = ROOT }) {
+export async function makeSample({ seed, staff = null, year = null, month = null, withTable = false, root = ROOT }) {
   const M = await import(pathToFileURL(join(root, 'app/js/model.js')).href);
   const C = await import(pathToFileURL(join(root, 'app/js/calendar.js')).href);
   const r = rng(seed);
@@ -100,6 +100,17 @@ export async function makeSample({ seed, staff = null, year = null, month = null
       else if (x < 0.12) (d.month.requests[p.id] ??= {})[day] = { kind: 'shift', shift: pick(p.shifts) };
     }
   }
+  // 表も埋める（画面の確かめ用。ふつうの書き出しは変えないよう、頼まれたときだけ）
+  if (withTable) {
+    for (const p of d.staff) {
+      for (let day = 1; day <= nDays; day += 1) {
+        const x = r();
+        const v = x < 0.6 ? { kind: 'shift', shift: pick(p.shifts) } : { kind: pick(['off', 'off', 'paid', 'half', 'ake', 'spare']) };
+        (d.month.table[p.id] ??= {})[day] = v;
+        if (r() < 0.05) (d.month.marks[p.id] ??= {})[day] = { locked: true };
+      }
+    }
+  }
   return d;
 }
 
@@ -109,6 +120,7 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
     staff: arg('staff') ? Number(arg('staff')) : null,
     year: arg('year') ? Number(arg('year')) : null,
     month: arg('month') ? Number(arg('month')) : null,
+    withTable: process.argv.includes('--with-table'),
   });
   const text = JSON.stringify(d, null, 2);
   const out = arg('out');

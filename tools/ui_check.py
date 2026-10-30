@@ -13,7 +13,9 @@
   - ひとつ前の保存に戻せるか
   - 日ごとの必要人数のキーボード操作
   - シフトを追加の小窓で、まずい記号を断るか
-  - 名前に HTML を入れても、文字として出るか（動かないか）
+  - 名前に HTML を入れても、文字として出るか（動かないか）。希望とシフト表の表でも
+  - 希望の入力（記号を選んでマスを押す・消す・キーボード）、シフト表（選ぶ小窓・夜勤の次の日の明け・固定）
+  - 2月と12月・スタッフ 50 人の作り物の月で、崩れず、マスを押してから 0.3 秒以内に小窓が出るか
   - 保存データが読めないとき、控えを残して知らせるか
 終わりに、結果を JSON で表示する。1 つでも失敗があれば、終わりのコードは 1。
 """
@@ -294,8 +296,15 @@ def scenario_backup_sequences(browser, base):
     ctx, page, errors = fresh_page(browser, base, 1280, "light")
     t(page, "sample-retail").click()
     rename_first_staff(page, "AA")
+    t(page, "step-4").click()
+    page.locator('[data-testid="brush"][data-brush="off"]').click()
+    page.locator('[data-testid="request-cell"][data-row="0"][data-day="3"]').click()
+    t(page, "step-6").click()
+    page.locator('[data-testid="table-cell"][data-row="1"][data-day="4"]').click()
+    page.locator('[data-testid="pick-option"][data-kind="off"]').click()
     a = stored(page)
     m = json.loads(a)["month"]
+    ok(bool(m["requests"]) and bool(m["table"]), "順番3：A に希望と表のマスが入っている")
     for k in range(2):
         t(page, "step-1").click()
         y, mo = m["year"], m["month"] + 1 + k
@@ -331,6 +340,135 @@ def scenario_backup_sequences(browser, base):
     ok(not errors, "エラー0 控えがいっぱい", " / ".join(errors[:3]))
     ctx.close()
 
+
+def scenario_requests(browser, base):
+    ctx, page, errors = fresh_page(browser, base, 1280, "light")
+    t(page, "sample-restaurant").click()
+    t(page, "step-4").click()
+    req = lambda: json.loads(stored(page))["month"]["requests"]
+    data = json.loads(stored(page))
+    pid = data["staff"][0]["id"]
+    cell = lambda d: page.locator(f'[data-testid="request-cell"][data-row="0"][data-day="{d}"]')
+    page.locator('[data-testid="brush"][data-brush="off"]').click()
+    cell(3).click()
+    ok(req().get(pid, {}).get("3") == {"kind": "off"} and cell(3).inner_text().strip() == "休", "休みを選んでマスを押すと、休みの希望が入る")
+    cell(3).click()
+    ok("3" not in req().get(pid, {}), "同じ記号でもう一度押すと、消える")
+    sid = data["settings"]["shifts"][0]["id"]
+    page.locator(f'[data-testid="brush"][data-brush="{sid}"]').click()
+    cell(4).click()
+    ok(req().get(pid, {}).get("4") == {"kind": "shift", "shift": sid}, "シフトの記号を選んでマスを押すと、出勤の固定が入る")
+    page.locator('[data-testid="brush"][data-brush="clear"]').click()
+    cell(4).click()
+    ok("4" not in req().get(pid, {}), "「消す」を選んでマスを押すと、消える")
+    page.locator('[data-testid="brush"][data-brush="paid"]').click()
+    cell(5).click()
+    page.keyboard.press("ArrowRight")
+    page.keyboard.press("Enter")
+    ok(req().get(pid, {}).get("6") == {"kind": "paid"}, "矢印キーで動いて Enter で入る")
+    page.keyboard.press("ArrowDown")
+    ok(page.evaluate("() => document.activeElement.dataset.row") == "1", "↓ で下の人へ動く")
+    ok(not errors, "エラー0 希望の入力", " / ".join(errors[:3]))
+    ctx.close()
+
+
+def scenario_table(browser, base):
+    ctx, page, errors = fresh_page(browser, base, 1280, "light")
+    t(page, "sample-care").click()
+    data = json.loads(stored(page))
+    pid = data["staff"][1]["id"]
+    night = next(s["id"] for s in data["settings"]["shifts"] if s["night"])
+    day_shift = data["settings"]["shifts"][0]["id"]
+    t(page, "step-4").click()
+    page.locator('[data-testid="brush"][data-brush="off"]').click()
+    page.locator('[data-testid="request-cell"][data-row="1"][data-day="12"]').click()
+    t(page, "step-6").click()
+    tab = lambda: json.loads(stored(page))["month"]["table"].get(pid, {})
+    cell = lambda d: page.locator(f'[data-testid="table-cell"][data-row="1"][data-day="{d}"]')
+
+    def pick(kind, shift=None):
+        sel = f'[data-testid="pick-option"][data-kind="{kind}"]' + (f'[data-shift="{shift}"]' if shift else "")
+        page.locator(sel).click()
+
+    cell(5).click()
+    ok(t(page, "cell-picker").count() == 1, "マスを押すと、選ぶ小窓が出る")
+    pick("shift", night)
+    ok(tab().get("5", {}).get("shift") == night and tab().get("6") == {"kind": "ake"}, "夜勤を入れると、次の日に明けが入る")
+    ok(cell(6).inner_text().strip() == "明" and "g-night" in (cell(5).get_attribute("class") or ""), "夜勤のマスは夜の色、次の日は「明」")
+    cell(5).click()
+    pick("shift", day_shift)
+    ok("6" not in tab(), "夜勤を外すと、次の日の明けも外れる")
+    cell(9).click()
+    pick("off")
+    cell(8).click()
+    pick("shift", night)
+    ok(tab().get("9") == {"kind": "off"} and t(page, "ake-blocked-notice").count() == 1, "次の日がもう埋まっていたら、明けにせずに知らせる")
+    cell(2).click()
+    t(page, "pick-lock").check()
+    t(page, "picker-close").click()
+    marks = json.loads(stored(page))["month"]["marks"].get(pid, {})
+    ok(marks.get("2") == {"locked": True} and cell(2).locator("svg.lock-icon").count() == 1, "固定すると、錠の印が付く")
+    ok(all("edited" not in v for v in marks.values()), "まだ自動で作っていない表では、手で変えた印を付けない")
+    cell(12).click()
+    ok("公休" in t(page, "pick-request").inner_text(), "小窓に、その日の希望が出る")
+    pick("empty")
+    ok("12" not in tab(), "「空ける」でマスが空く")
+    ok(not errors, "エラー0 シフト表", " / ".join(errors[:3]))
+    ctx.close()
+    # 1日1人の役は太字
+    ctx, page, errors = fresh_page(browser, base, 1280, "light")
+    t(page, "sample-restaurant").click()
+    data = json.loads(stored(page))
+    one = next(s for s in data["settings"]["shifts"] if s["onePerDay"])
+    t(page, "step-6").click()
+    page.locator('[data-testid="table-cell"][data-row="0"][data-day="1"]').click()
+    page.locator(f'[data-testid="pick-option"][data-kind="shift"][data-shift="{one["id"]}"]').click()
+    w = page.locator('[data-testid="table-cell"][data-row="0"][data-day="1"] .cell-text').evaluate("e => getComputedStyle(e).fontWeight")
+    ok(int(w) >= 700, "1日1人の役は太字", w)
+    ok(not errors, "エラー0 1日1人の役", " / ".join(errors[:3]))
+    ctx.close()
+
+
+def scenario_big(browser, base):
+    """2月（28日）・12月（31日）、スタッフ 50 人の作り物の月で、崩れず、重すぎないか"""
+    import subprocess
+    for seed, year, month in [(11, 2027, 2), (12, 2026, 12)]:
+        text = subprocess.run(
+            ["node", str(ROOT / "tools/make-sample.mjs"), "--seed", str(seed), "--staff", "50",
+             "--year", str(year), "--month", str(month), "--with-table"],
+            capture_output=True, text=True, encoding="utf-8", check=True,
+        ).stdout
+        data = json.loads(text)
+        days = len(data["month"]["table"][data["staff"][0]["id"]])
+        for width, scheme in [(1280, "light"), (375, "dark")]:
+            label = f"{year}年{month}月 50人 {scheme} {width}px"
+            ctx, page, errors = fresh_page(browser, base, width, scheme)
+            page.evaluate("(t) => localStorage.setItem('shift-maker:data', t)", text)
+            page.goto(base + "/app/")
+            page.wait_for_selector('[data-testid="screen-title"]')
+            for n, cells in [(4, "request-cell"), (6, "table-cell")]:
+                t0 = page.evaluate("() => performance.now()")
+                go(page, n, width)
+                ms = page.evaluate("(t0) => performance.now() - t0", t0)
+                ok(ms < 1500, f"{label} 手順{n}が1.5秒以内に出る", f"{ms:.0f}ms")
+                ok(page.locator(f'[data-testid="{cells}"]').count() == 50 * days, f"{label} 手順{n}のマスが 50人×{days}日")
+                look(page, f"{label} 手順{n}", f"big-{year}-{month}-step{n}-{scheme}-{width}")
+            r = page.evaluate("""() => {
+              const b = document.querySelector('[data-testid="table-cell"][data-row="45"][data-day="20"]');
+              const t0 = performance.now();
+              b.click();
+              return { ms: performance.now() - t0, open: !!document.querySelector('dialog[open]') };
+            }""")
+            ok(r["open"] and r["ms"] < 300, f"{label} マスを押してから小窓が出るまで 0.3 秒以内", f"{r['ms']:.0f}ms")
+            r = page.evaluate("""() => {
+              const b = document.querySelector('[data-testid="pick-option"][data-kind="off"]');
+              const t0 = performance.now();
+              b.click();
+              return { ms: performance.now() - t0 };
+            }""")
+            ok(r["ms"] < 300, f"{label} 選んでからマスが変わるまで 0.3 秒以内", f"{r['ms']:.0f}ms")
+            ok(not errors, f"エラー0 {label}", " / ".join(errors[:3]))
+            ctx.close()
 
 def scenario_month_backup(browser, base):
     ctx, page, errors = fresh_page(browser, base, 1280, "light")
@@ -458,6 +596,11 @@ def scenario_text_safety(browser, base):
     ok(page.evaluate("() => window.__x") is None, "名前に入れた HTML が動かない")
     ok(evil in t(page, "staff-list").inner_text(), "名前に入れた HTML が、文字のまま出る")
     ok(page.locator("#screen svg").count() == 0, "名前に入れた HTML が、絵などにならない")
+    for n, grid in [(4, "request-grid"), (6, "shift-grid")]:
+        t(page, f"step-{n}").click()
+        ok(evil in t(page, grid).inner_text(), f"手順{n}の表でも、名前の HTML が文字のまま出る")
+        ok(page.locator(f'[data-testid="{grid}"] svg:not(.lock-icon)').count() == 0, f"手順{n}の表で、名前の HTML が絵にならない")
+        ok(page.evaluate("() => window.__x") is None, f"手順{n}の表で、名前の HTML が動かない")
     ok(not [e for e in errors if "favicon" not in e and "/x" not in e], "エラー0 文字の扱い", " / ".join(errors[:3]))
     ctx.close()
 
@@ -489,6 +632,9 @@ def main():
         scenario_month_backup(browser, base)
         scenario_backup_sequences(browser, base)
         scenario_need_grid(browser, base)
+        scenario_requests(browser, base)
+        scenario_table(browser, base)
+        scenario_big(browser, base)
         scenario_add_shift(browser, base)
         scenario_text_safety(browser, base)
         scenario_broken(browser, base)

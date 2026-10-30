@@ -1,6 +1,6 @@
 // データの形と、データを作る・確かめる・直す関数。
 // 画面（DOM）には触らない。ブラウザでも node（確かめの道具）でも同じものを使う。
-import { daysInMonth, weekdayOf } from './calendar.js?v=1.1.2';
+import { daysInMonth, weekdayOf } from './calendar.js?v=1.2';
 
 // データの形の版。形を変えたら 1 つ上げ、migrate() に古い形を直す手順を足す。
 export const FORMAT_VERSION = 1;
@@ -290,6 +290,101 @@ export function monthHasContent(data) {
 // 月を切り替える：日付つきのデータを片付ける。スタッフと設定は残す。
 export function switchMonth(data, year, month) {
   data.month = newMonth(year, month);
+}
+
+// ---------- 希望とシフト表のマス ----------
+
+// part[pid][day] に value を書く。null なら消す。空になった入れ物も消す
+function writeCell(part, pid, day, value) {
+  if (value) {
+    part[pid] ??= {};
+    part[pid][day] = value;
+  } else if (part[pid]) {
+    delete part[pid][day];
+    if (!Object.keys(part[pid]).length) delete part[pid];
+  }
+}
+
+function cellValue(value) {
+  if (!value) return null;
+  return value.kind === 'shift' ? { kind: 'shift', shift: value.shift } : { kind: value.kind };
+}
+
+export function requestOf(data, pid, day) {
+  return data.month.requests[pid]?.[day] ?? null;
+}
+
+// 希望を入れる（value: { kind: 'off' | 'paid' | 'half' } か { kind: 'shift', shift }。null で消す）
+export function setRequest(data, pid, day, value) {
+  writeCell(data.month.requests, pid, day, cellValue(value));
+}
+
+export function cellOf(data, pid, day) {
+  return data.month.table[pid]?.[day] ?? null;
+}
+
+export function marksOf(data, pid, day) {
+  return data.month.marks[pid]?.[day] ?? {};
+}
+
+function setMark(data, pid, day, key, on) {
+  const cur = { ...marksOf(data, pid, day) };
+  if (on) cur[key] = true;
+  else delete cur[key];
+  writeCell(data.month.marks, pid, day, Object.keys(cur).length ? cur : null);
+}
+
+// 固定（自動で作るときに、このマスを変えない）
+export function setLock(data, pid, day, on) {
+  setMark(data, pid, day, 'locked', on);
+}
+
+export function isNightShift(data, value) {
+  return value?.kind === 'shift' && Boolean(shiftById(data, value.shift)?.night);
+}
+
+// 表のマスを手で変える。
+// 夜勤を入れたら、次の日が空いていれば「明け」にする。夜勤を外したら、次の日の「明け」も外す。
+// 一度自動で作った表（month.runs がある）を手で変えたら「手で変えた」の印を付ける。
+// 返す：次の日をどうしたか { what: 'ake-set' | 'ake-cleared' | 'ake-blocked', cell } か null
+export function setCellByHand(data, pid, day, value) {
+  const t = data.month.table;
+  const generated = data.month.runs.length > 0;
+  const wasNight = isNightShift(data, cellOf(data, pid, day));
+  writeCell(t, pid, day, cellValue(value));
+  if (generated) setMark(data, pid, day, 'edited', true);
+  if (day >= monthDays(data)) return null;
+  const next = cellOf(data, pid, day + 1);
+  if (isNightShift(data, value)) {
+    if (!next) {
+      writeCell(t, pid, day + 1, { kind: 'ake' });
+      if (generated) setMark(data, pid, day + 1, 'edited', true);
+      return { what: 'ake-set', cell: null };
+    }
+    return next.kind === 'ake' ? null : { what: 'ake-blocked', cell: next };
+  }
+  if (wasNight && next?.kind === 'ake') {
+    writeCell(t, pid, day + 1, null);
+    if (generated) setMark(data, pid, day + 1, 'edited', true);
+    return { what: 'ake-cleared', cell: null };
+  }
+  return null;
+}
+
+// マスの記号（シフトは利用者が付けた記号、休みなどは休・有・半・明・余）
+export function cellSymbol(data, value) {
+  if (!value) return '';
+  if (value.kind === 'shift') return shiftById(data, value.shift)?.symbol ?? '?';
+  return REST_KINDS.find((r) => r.id === value.kind)?.symbol ?? '?';
+}
+
+export function cellName(data, value) {
+  if (!value) return '空き';
+  if (value.kind === 'shift') {
+    const s = shiftById(data, value.shift);
+    return s ? `${s.name || s.symbol}（${s.symbol}）` : '?';
+  }
+  return REST_KINDS.find((r) => r.id === value.kind)?.label ?? '?';
 }
 
 // ---------- 消す ----------

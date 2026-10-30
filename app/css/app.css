@@ -25,6 +25,14 @@
   --sun: #b42318;
   --sat: #1d5bb8;
   --backdrop: rgba(0, 0, 0, 0.45);
+  --g-early-bg: #fff0c2;
+  --g-late-bg: #d9e8fb;
+  --g-night-bg: #e6dcf6;
+  --k-off-bg: #eceef1;
+  --k-paid-bg: #dff1e3;
+  --k-half-bg: #eaf4dc;
+  --k-ake-bg: #e4e4e4;
+  --k-spare-bg: #d9f1ee;
   color-scheme: light;
 }
 
@@ -55,11 +63,27 @@
     --sun: #ff9a8f;
     --sat: #8ab8ff;
     --backdrop: rgba(0, 0, 0, 0.6);
+    --g-early-bg: #4a3a10;
+    --g-late-bg: #1d3757;
+    --g-night-bg: #382c55;
+    --k-off-bg: #2b3138;
+    --k-paid-bg: #1d3a27;
+    --k-half-bg: #273a1f;
+    --k-ake-bg: #34383e;
+    --k-spare-bg: #173b38;
     color-scheme: dark;
   }
 }
 
 :root[data-theme="dark"] {
+  --g-early-bg: #4a3a10;
+  --g-late-bg: #1d3757;
+  --g-night-bg: #382c55;
+  --k-off-bg: #2b3138;
+  --k-paid-bg: #1d3a27;
+  --k-half-bg: #273a1f;
+  --k-ake-bg: #34383e;
+  --k-spare-bg: #173b38;
   --bg: #14171b;
   --surface: #1d2126;
   --surface-2: #272c33;
@@ -379,6 +403,98 @@ fieldset.field { border: 1px solid var(--border); border-radius: 8px; padding: 8
 .swatch-override { background: var(--override-bg); }
 .swatch-rule { border: none; border-bottom: 2px dotted var(--rule-line); border-radius: 0; }
 
+/* スタッフ×日の表（希望・シフト表） */
+.staff-grid { border-collapse: separate; border-spacing: 0; }
+.staff-grid th, .staff-grid td { border-bottom: 1px solid var(--border); padding: 2px; text-align: center; }
+.staff-grid .sticky-col {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--surface);
+  text-align: left;
+  white-space: nowrap;
+  padding-right: 8px;
+  max-width: 9em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.staff-head { font-weight: 600; }
+.grid-cell {
+  position: relative;
+  width: 2.6em;
+  min-height: 36px;
+  padding: 0 2px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.95rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.grid-cell.is-one .cell-text, .is-one .pick-sym, .is-one .brush-sym { font-weight: 800; }
+.grid-cell.is-one { font-weight: 800; }
+.lock-icon { width: 10px; height: 10px; fill: none; stroke: currentColor; stroke-width: 1.4; }
+.grid-cell .lock-icon { position: absolute; top: 1px; left: 1px; }
+.grid-cell.is-edited::after {
+  content: "";
+  position: absolute;
+  left: 3px;
+  bottom: 3px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.legend-row { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-bottom: 8px; }
+.legend-row .lock-icon { width: 14px; height: 14px; }
+.legend-bold { font-weight: 800; padding: 0 4px; border: 1px solid var(--border); border-radius: 3px; color: var(--text); }
+.legend-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+
+/* 希望の入力の記号 */
+.palette { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.palette-title { font-size: 0.85rem; color: var(--text-muted); margin-left: 4px; }
+.palette-title:empty { display: none; }
+.brush {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+.brush.is-current { outline: 3px solid var(--primary); outline-offset: 1px; font-weight: 700; }
+.brush-sym { font-weight: 700; min-width: 1.2em; text-align: center; }
+
+/* マスを選ぶ小窓 */
+.picker .pick-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 8px; }
+.pick {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-height: 52px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.pick.is-current { outline: 3px solid var(--primary); outline-offset: 1px; }
+.pick-sym { font-weight: 700; font-size: 1.1rem; min-height: 1.2em; }
+.pick-label { font-size: 0.85rem; }
+.pick-note { font-size: 0.75rem; padding: 0 4px; border-radius: 4px; background: var(--warn-bg); color: var(--warn-text); }
+.pick-lock { margin-top: 12px; align-items: flex-start; }
+
 /* スタッフ */
 .staff-layout { display: grid; grid-template-columns: minmax(220px, 300px) minmax(0, 1fr); gap: 16px; align-items: start; }
 .staff-list { list-style: none; padding: 0; margin: 0 0 12px; display: grid; gap: 6px; max-height: 70vh; overflow-y: auto; }
@@ -401,6 +517,17 @@ fieldset.field { border: 1px solid var(--border); border-radius: 8px; padding: 8
 .back-to-list { display: none; margin-bottom: 8px; }
 
 .noscript { padding: 16px; }
+
+/* 時間帯のグループ・休みなどの色（表・記号・凡例で同じ色を使う） */
+.g-early { background: var(--g-early-bg); }
+.g-late { background: var(--g-late-bg); }
+.g-night { background: var(--g-night-bg); }
+.k-off, .req-off { background: var(--k-off-bg); }
+.k-paid, .req-paid { background: var(--k-paid-bg); }
+.k-half, .req-half { background: var(--k-half-bg); }
+.k-ake { background: var(--k-ake-bg); }
+.k-spare { background: var(--k-spare-bg); }
+.req-shift { box-shadow: inset 0 0 0 2px var(--text-muted); }
 
 /* スマホの幅 */
 @media (max-width: 760px) {

@@ -542,5 +542,69 @@
  {
   "id": "broken-export-panel",
   "find": "broken-export-panel"
+ },
+ {
+  "id": "request-palette",
+  "find": "request-palette"
+ },
+ {
+  "id": "brush",
+  "find": "brush"
+ },
+ {
+  "id": "request-status",
+  "find": "request-status"
+ },
+ {
+  "id": "request-grid",
+  "find": "request-grid"
+ },
+ {
+  "id": "request-cell",
+  "find": "request-cell"
+ },
+ {
+  "id": "request-empty",
+  "find": "request-empty"
+ },
+ {
+  "id": "shift-grid",
+  "find": "shift-grid"
+ },
+ {
+  "id": "table-cell",
+  "find": "table-cell"
+ },
+ {
+  "id": "table-empty",
+  "find": "table-empty"
+ },
+ {
+  "id": "table-legend",
+  "find": "table-legend"
+ },
+ {
+  "id": "cell-picker",
+  "find": "cell-picker"
+ },
+ {
+  "id": "pick-option",
+  "find": "pick-option"
+ },
+ {
+  "id": "pick-lock",
+  "find": "pick-lock"
+ },
+ {
+  "id": "pick-request",
+  "find": "pick-request"
+ },
+ {
+  "id": "picker-close",
+  "find": "picker-close"
+ },
+ {
+  "id": "ake-blocked-notice",
+  "find": "ake-blocked-notice"
  }
 ]

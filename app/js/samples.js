@@ -1,7 +1,7 @@
 // 業種の見本。スタッフはすべて作り物（A・B・C…）。
 // 「ちょうど良くきつい月」に合わせるのは、自動で作れるようになってから（v3）。
-import { emptyData, newRank, newSkill, newShift, newStaff, newSpecialDay, newId, canonicalJSON } from './model.js?v=1.1.2';
-import { daysInMonth } from './calendar.js?v=1.1.2';
+import { emptyData, newRank, newSkill, newShift, newStaff, newSpecialDay, newId, canonicalJSON } from './model.js?v=1.2';
+import { daysInMonth } from './calendar.js?v=1.2';
 
 export const SAMPLE_KINDS = [
   {

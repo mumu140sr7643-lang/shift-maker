@@ -1,5 +1,5 @@
 // 小窓（確かめ・選ぶ）と、画面の上の知らせ。
-import { h, append, clear } from './dom.js?v=1.1.2';
+import { h, append, clear } from './dom.js?v=1.2';
 
 // buttons: [{ label, value, kind: 'primary' | 'danger' | 'plain', testid }]
 // 選んだボタンの value を返す。Esc で閉じたら 'cancel'
