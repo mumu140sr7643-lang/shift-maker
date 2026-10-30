@@ -1,15 +1,15 @@
 // 手順1 基本設定
-import { h, append, field, select, numberInput } from '../dom.js?v=1.3';
-import { app, commit } from '../state.js?v=1.3';
+import { h, append, field, select, numberInput } from '../dom.js?v=1.3.1';
+import { app, commit } from '../state.js?v=1.3.1';
 import {
   GROUP_IDS, LIMITS, newRank, newSkill, newSpecialDay, staffWithRank, removeRank, removeSkill,
   monthHasContent, switchMonth, monthDays, shiftById,
-} from '../model.js?v=1.3';
-import { monthLabel, weekdayOf, WEEKDAY_LABELS, isNextMonth } from '../calendar.js?v=1.3';
-import { ask, notify } from '../dialog.js?v=1.3';
-import { takeBackup, backupLines } from '../backup.js?v=1.3';
-import { exportData } from '../files.js?v=1.3';
-import { screenTitle, section, checkbox, textInput, warn } from './common.js?v=1.3';
+} from '../model.js?v=1.3.1';
+import { monthLabel, weekdayOf, WEEKDAY_LABELS, isNextMonth } from '../calendar.js?v=1.3.1';
+import { ask, notify } from '../dialog.js?v=1.3.1';
+import { takeBackup, backupLines } from '../backup.js?v=1.3.1';
+import { exportData } from '../files.js?v=1.3.1';
+import { screenTitle, section, checkbox, textInput, warn } from './common.js?v=1.3.1';
 
 function monthValue(y, m) {
   return `${y}-${String(m).padStart(2, '0')}`;

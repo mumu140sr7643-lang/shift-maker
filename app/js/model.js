@@ -1,6 +1,6 @@
 // データの形と、データを作る・確かめる・直す関数。
 // 画面（DOM）には触らない。ブラウザでも node（確かめの道具）でも同じものを使う。
-import { daysInMonth, weekdayOf } from './calendar.js?v=1.3';
+import { daysInMonth, weekdayOf } from './calendar.js?v=1.3.1';
 
 // データの形の版。形を変えたら 1 つ上げ、migrate() に古い形を直す手順を足す。
 export const FORMAT_VERSION = 1;
@@ -463,10 +463,15 @@ export function removeShift(data, shiftId) {
 export function removeSkill(data, skillId) {
   data.settings.skills = data.settings.skills.filter((k) => k.id !== skillId);
   for (const p of data.staff) p.skills = p.skills.filter((id) => id !== skillId);
-  for (const byEmp of Object.values(data.month.dailySkill)) {
-    for (const days of Object.values(byEmp)) {
-      for (const [day, list] of Object.entries(days)) days[day] = list.filter((id) => id !== skillId);
+  // 日ごとに要るスキルの形は「シフト → 日 → スキルの一覧」。スキルが空になった日・シフトは消す
+  const daily = data.month.dailySkill;
+  for (const [shiftId, days] of Object.entries(daily)) {
+    for (const [day, list] of Object.entries(days)) {
+      const rest = list.filter((id) => id !== skillId);
+      if (rest.length) days[day] = rest;
+      else delete days[day];
     }
+    if (!Object.keys(days).length) delete daily[shiftId];
   }
 }
 

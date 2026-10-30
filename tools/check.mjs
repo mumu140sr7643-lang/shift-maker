@@ -10,6 +10,7 @@ import { makeSample } from './make-sample.mjs';
 import * as M from '../app/js/model.js';
 import * as S from '../app/js/samples.js';
 import { APP_VERSION } from '../app/js/version.js';
+import { parseData } from '../app/js/storage.js';
 
 const results = [];
 const check = (name, problems) => results.push({ name, problems });
@@ -172,6 +173,45 @@ const check = (name, problems) => results.push({ name, problems });
     if (!M.importProblems(d).length) problems.push(`${name} を断れませんでした`);
   }
   check(`取り込むときの大きさ（${cases.length} 通り）`, problems);
+}
+
+// 9c. 書き出したファイルを取り込むと、1文字も違わずに同じデータになる（見本4つ・作り物の月40種・古い形のデータ）
+{
+  const problems = [];
+  const all = [];
+  for (const kind of ['restaurant', 'retail', 'care', 'blank']) all.push([`見本 ${kind}`, S.buildSample(kind, 2026, 11)]);
+  for (let seed = 1; seed <= 40; seed += 1) all.push([`作り物 種${seed}`, await makeSample({ seed, withTable: seed % 2 === 0 })]);
+  for (const name of readdirSync(join(ROOT, 'tools/fixtures')).filter((f) => f.endsWith('.json'))) {
+    all.push([`古い形 ${name}`, JSON.parse(readFileSync(join(ROOT, 'tools/fixtures', name), 'utf8'))]);
+  }
+  for (const [name, d] of all) {
+    const text = M.canonicalJSON(d);
+    const r = parseData(text);
+    if (r.error) problems.push(`${name}: 取り込めない（${r.error[0]}）`);
+    else if (M.importProblems(r.data).length) problems.push(`${name}: 大きさで断られる`);
+    else if (M.canonicalJSON(r.data) !== text) problems.push(`${name}: 取り込むと中身が変わる`);
+  }
+  const newer = parseData(JSON.stringify({ ...S.buildSample('care', 2026, 11), formatVersion: M.FORMAT_VERSION + 1 }));
+  if (!newer.error || !newer.error[0].includes('新しい版')) problems.push('新しすぎる版のファイルを「新しい版」と書いて断れない');
+  check(`書き出し→取り込みで同じになる（${all.length} 通り）`, problems);
+}
+
+// 9d. スキルを消しても、日ごとに要るスキルのデータがこわれない
+{
+  const problems = [];
+  const d = S.buildSample('restaurant', 2026, 11);
+  const [k1, k2] = d.settings.skills.map((k) => k.id);
+  const s1 = d.settings.shifts[0].id;
+  d.month.dailySkill = { [s1]: { 3: [k1], 4: [k1, k2] } };
+  try {
+    M.removeSkill(d, k1);
+    if (JSON.stringify(d.month.dailySkill) !== JSON.stringify({ [s1]: { 4: [k2] } })) problems.push(`日ごとに要るスキルが ${JSON.stringify(d.month.dailySkill)} になった`);
+    const errs = M.validateData(JSON.parse(JSON.stringify(d)));
+    if (errs.length) problems.push(`消したあと読めない: ${errs[0]}`);
+  } catch (e) {
+    problems.push(`エラーになった: ${e.message}`);
+  }
+  check('スキルを消す（日ごとに要るスキルがあるとき）', problems);
 }
 
 // 10. 言葉の確かめ：一覧の言葉が、リポジトリのファイル・コミットの文に入っていないか

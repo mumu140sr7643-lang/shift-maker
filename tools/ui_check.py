@@ -607,6 +607,120 @@ def scenario_import(browser, base):
     ok(not errors, "エラー0 取り込み（見本の画面から）", " / ".join(errors[:3]))
     ctx.close()
 
+def scenario_import_more(browser, base):
+    """取り込みの追加の確かめ（確かめ役の見るところ）"""
+    cases = OUT / "import-cases"
+    cases.mkdir(parents=True, exist_ok=True)
+
+    def choose(page, testid, path):
+        with page.expect_file_chooser() as fc:
+            t(page, testid).click()
+        fc.value.set_files(str(path))
+
+    def import_ok(page, path):
+        t(page, "data-button").click()
+        choose(page, "import-file", path)
+        t(page, "import-ok").click()
+
+    ctx, page, errors = fresh_page(browser, base, 1280, "light")
+    t(page, "sample-restaurant").click()
+    rename_first_staff(page, "AA")
+    a = stored(page)
+    base_data = json.loads(a)
+
+    # 1. 取り込みを2回続けても、最初のデータに戻れる
+    f1 = json.loads(a)
+    f1["staff"][0]["name"] = "F1"
+    f2 = json.loads(a)
+    f2["staff"][0]["name"] = "F2"
+    (cases / "f1.json").write_text(json.dumps(f1, ensure_ascii=False), encoding="utf-8")
+    (cases / "f2.json").write_text(json.dumps(f2, ensure_ascii=False), encoding="utf-8")
+    import_ok(page, cases / "f1.json")
+    import_ok(page, cases / "f2.json")
+    bid = backup_id_of(page, a)
+    ok(bid is not None, "取り込みを2回続けても、最初のデータの控えが残る")
+    if bid:
+        t(page, "data-button").click()
+        page.locator(f'[data-testid="restore-backup"][data-backup-id="{bid}"]').click()
+        t(page, "restore-backup-ok").click()
+        ok(stored(page) == a, "取り込みを2回続けたあと、最初のデータに1文字も違わずに戻る")
+
+    # 2. 古い形のファイル（tools/fixtures）を取り込める
+    for fx in sorted((ROOT / "tools/fixtures").glob("*.json")):
+        import_ok(page, fx)
+        ok(json.loads(stored(page)) == json.loads(fx.read_text(encoding="utf-8")), f"古い形のファイル（{fx.name}）を取り込める")
+
+    # 3. 「=」「@」で始まる名前は、そのまま文字として入る
+    eq = json.loads(json.dumps(base_data))
+    eq["staff"][0]["name"] = "=SUM(1)"
+    eq["staff"][1]["name"] = "@B"
+    (cases / "formula-name.json").write_text(json.dumps(eq, ensure_ascii=False), encoding="utf-8")
+    import_ok(page, cases / "formula-name.json")
+    t(page, "step-3").click()
+    text = t(page, "staff-list").inner_text()
+    ok("=SUM(1)" in text and "@B" in text, "「=」「@」で始まる名前は、文字のまま入る")
+
+    # 4. もっと多くのまずいファイル（空・ほかのアプリのファイル・番号の控えがそろっていない）を断り、そのあとも使える
+    nextids = json.loads(json.dumps(base_data))
+    nextids["nextIds"]["staff"] = 1
+    bad = {
+        "empty.json": "",
+        "other-app.json": json.dumps({"name": "other-app", "version": "1.0.0", "dependencies": {}}),
+        "nextids.json": json.dumps(nextids, ensure_ascii=False),
+    }
+    for name, body in bad.items():
+        (cases / name).write_text(body, encoding="utf-8")
+        before = stored(page)
+        t(page, "data-button").click()
+        choose(page, "import-file", cases / name)
+        dlg = t(page, "import-error-dialog")
+        dlg.wait_for()
+        ok("いまのデータは、そのままです" in dlg.inner_text(), f"まずいファイル（{name}）は理由を出して断る", dlg.inner_text()[:80])
+        t(page, "import-error-close").click()
+        ok(stored(page) == before, f"まずいファイル（{name}）を断ったあと、いまのデータのまま")
+    newer = json.loads(json.dumps(base_data))
+    newer["formatVersion"] = 99
+    (cases / "newer.json").write_text(json.dumps(newer, ensure_ascii=False), encoding="utf-8")
+    t(page, "data-button").click()
+    choose(page, "import-file", cases / "newer.json")
+    ok("新しい版" in t(page, "import-error-dialog").inner_text(), "新しすぎる版のファイルは「新しい版で作られた」と書いて断る")
+    t(page, "import-error-close").click()
+    t(page, "step-2").click()
+    ok(t(page, "screen-title").inner_text().startswith("手順2"), "断ったあとも、画面が使える")
+
+    # 5. 日ごとに要るスキルの入ったファイルを取り込み、そのスキルを消してもエラーにならない
+    ds = json.loads(json.dumps(base_data))
+    k1 = ds["settings"]["skills"][0]["id"]
+    k2 = ds["settings"]["skills"][1]["id"]
+    s1 = ds["settings"]["shifts"][0]["id"]
+    ds["month"]["dailySkill"] = {s1: {"3": [k1], "4": [k1, k2]}}
+    (cases / "daily-skill.json").write_text(json.dumps(ds, ensure_ascii=False), encoding="utf-8")
+    import_ok(page, cases / "daily-skill.json")
+    t(page, "step-1").click()
+    t(page, "skill-delete").first.click()
+    t(page, "skill-delete-ok").click()
+    d = json.loads(stored(page))
+    ok(all(k["id"] != k1 for k in d["settings"]["skills"]), "スキルを消せる（日ごとに要るスキルのデータがあっても）")
+    ok(d["month"]["dailySkill"] == {s1: {"4": [k2]}}, "日ごとに要るスキルから、消したスキルが外れ、空になった日は消える", json.dumps(d["month"]["dailySkill"]))
+    page.reload()
+    page.wait_for_selector('[data-testid="screen-title"]')
+    ok(t(page, "broken-notice").count() == 0, "スキルを消したあと、読み直しても読める")
+    ok(not errors, "エラー0 取り込み（追加）", " / ".join(errors[:3]))
+    ctx.close()
+
+    # 6. スマホの幅でも「ファイルから取り込む」が押せて、知らせが読める
+    for scheme in ["light", "dark"]:
+        ctx, page, errors = fresh_page(browser, base, 375, scheme)
+        t(page, "sample-care").click()
+        t(page, "data-button").click()
+        look(page, f"取り込み 375 {scheme} 保存と控え")
+        choose(page, "import-file", cases / "shape.json")
+        t(page, "import-error-dialog").wait_for()
+        look(page, f"取り込み 375 {scheme} 断る小窓", f"import-error-{scheme}-375")
+        t(page, "import-error-close").click()
+        ok(not errors, f"エラー0 取り込み 375 {scheme}", " / ".join(errors[:3]))
+        ctx.close()
+
 def scenario_month_backup(browser, base):
     ctx, page, errors = fresh_page(browser, base, 1280, "light")
     t(page, "sample-retail").click()
@@ -773,6 +887,7 @@ def main():
         scenario_table(browser, base)
         scenario_lock_and_ake(browser, base)
         scenario_import(browser, base)
+        scenario_import_more(browser, base)
         scenario_big(browser, base)
         scenario_add_shift(browser, base)
         scenario_text_safety(browser, base)
