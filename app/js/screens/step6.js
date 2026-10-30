@@ -1,15 +1,19 @@
-// 手順6 シフト表（いまは手で作る）。マスを押すと、入れるものを選ぶ小窓が出る。
-import { h, append } from '../dom.js?v=2.1';
-import { app, commit } from '../state.js?v=2.1';
+// 手順6 シフト表。マスを押すと、入れるものを選ぶ小窓が出る。変えるたびに決まりを検査し直し、印・件数の帯・一覧を直す。
+import { h, append } from '../dom.js?v=2.2';
+import { app, commit } from '../state.js?v=2.2';
 import {
   REST_KINDS, shiftById, cellOf, marksOf, requestOf, setCellByHand, setLock, cellSymbol, cellName,
-} from '../model.js?v=2.1';
-import { weekdayOf, WEEKDAY_LABELS } from '../calendar.js?v=2.1';
-import { notify } from '../dialog.js?v=2.1';
-import { screenTitle } from './common.js?v=2.1';
-import { staffGrid } from './staffgrid.js?v=2.1';
+} from '../model.js?v=2.2';
+import { weekdayOf, WEEKDAY_LABELS } from '../calendar.js?v=2.2';
+import { notify } from '../dialog.js?v=2.2';
+import { checkTable } from '../check.js?v=2.2';
+import { screenTitle } from './common.js?v=2.2';
+import { staffGrid } from './staffgrid.js?v=2.2';
+import { needGrid } from './needgrid.js?v=2.2';
+import { markIndex, markClasses, markBadges, countBand, errorList, worsened } from './checkview.js?v=2.2';
 
 const SVG = 'http://www.w3.org/2000/svg';
+const NL = String.fromCharCode(10); // マウスを置いたときの文の改行
 
 // 固定の印（線画の錠）
 function lockIcon() {
@@ -25,8 +29,9 @@ function lockIcon() {
   return svg;
 }
 
-function tableCell(d, p, day) {
+function tableCell(d, p, day, marks) {
   const v = cellOf(d, p.id, day);
+  const mk = marks.get(`c|${p.id}|${day}`);
   const m = marksOf(d, p.id, day);
   const req = requestOf(d, p.id, day);
   const cls = [];
@@ -39,16 +44,23 @@ function tableCell(d, p, day) {
   }
   if (m.locked) cls.push('is-locked');
   if (m.edited) cls.push('is-edited');
+  cls.push(...markClasses(mk));
   const label = [
     cellName(d, v),
     m.locked ? '固定' : null,
     m.edited ? '作ったあとに手で変えた' : null,
     req ? `希望は${cellName(d, req)}` : null,
+    mk ? `エラー${mk.texts.length}件` : null,
   ].filter(Boolean).join('・');
-  return { text: cellSymbol(d, v), cls, label, extra: m.locked ? lockIcon() : null };
+  const extra = m.locked || mk ? h('span', { class: 'cell-marks' }, m.locked ? lockIcon() : null, markBadges(mk)) : null;
+  return { text: cellSymbol(d, v), cls, label, extra, title: mk ? mk.texts.join(NL) : null };
 }
 
-function openPicker(p, day, refresh, returnFocus) {
+function headMark(mk) {
+  return mk ? { cls: markClasses(mk), title: mk.texts.join(NL) } : null;
+}
+
+function openPicker(p, day, changed, returnFocus) {
   const d = app.data;
   const { year, month } = d.month;
   const now = cellOf(d, p.id, day);
@@ -62,9 +74,8 @@ function openPicker(p, day, refresh, returnFocus) {
   const choose = (value) => {
     let next = null;
     commit((x) => { next = setCellByHand(x, p.id, day, value); });
-    refresh(p, day);
-    refresh(p, day + 1);
     close();
+    changed(true);
     const nextDay = `${month}月${day + 1}日`;
     if (next?.what === 'ake-blocked') {
       notify(
@@ -96,7 +107,7 @@ function openPicker(p, day, refresh, returnFocus) {
   const lock = h('input', { type: 'checkbox', checked: Boolean(marksOf(d, p.id, day).locked), testid: 'pick-lock' });
   lock.addEventListener('change', () => {
     commit((x) => setLock(x, p.id, day, lock.checked));
-    refresh(p, day);
+    changed(false);
   });
   append(
     dlg,
@@ -143,34 +154,133 @@ function legend(d) {
     h('li', {}, lockIcon(), '固定（自動で作るときに変えない）'),
     h('li', {}, h('span', { class: 'legend-dot' }), '自動で作ったあとに、手で変えたマス'),
     h('li', {}, `休＝公休・有＝有給・半＝半休・明＝明け・余＝余り日`),
+    h('li', {}, h('span', { class: 'legend-cell m-six' }, h('span', { class: 'mk mk-six' })), '6連勤以上（濃い赤の太い枠・四角）'),
+    h('li', {}, h('span', { class: 'legend-cell m-hard' }, h('span', { class: 'mk mk-hard' })), '絶対の決まりに合わない（赤い枠・丸）'),
+    h('li', {}, h('span', { class: 'legend-cell m-soft' }, h('span', { class: 'mk mk-soft' })), 'できれば守る決まりに合わない（黄土色の点線・三角）'),
+    h('li', {}, h('span', { class: 'legend-cell k-spare' }), '余り日（青緑の縞）'),
+    h('li', {}, 'マスにマウスを置くと、そのマスのエラーの文が出ます。'),
   );
+}
+
+// シフト表で、そのシフト・区分に入っている人数（人数に数えないシフトは「―」）
+function assignedCounter(d) {
+  return (shiftId, emp, day) => {
+    const s = shiftById(d, shiftId);
+    if (!s || !s.counts || s.training) return null;
+    return d.staff.filter((p) => {
+      const v = cellOf(d, p.id, day);
+      return v?.kind === 'shift' && v.shift === shiftId && (emp === 'all' || p.employment === emp);
+    }).length;
+  };
+}
+
+function breakdown(d, result, key) {
+  const { month } = d.month;
+  if (key === 'short') {
+    const items = result.items.filter((it) => it.rule === 'shortage');
+    return h('div', {}, h('h3', { text: `不足の内訳（${result.totals.shortSlots}コマ）` }),
+      items.length ? h('ul', {}, items.map((it) => h('li', { text: it.text }))) : h('p', { class: 'help', text: '足りない日はありません。' }));
+  }
+  const rows = [];
+  for (const p of d.staff) {
+    const days = Object.entries(d.month.table[p.id] ?? {}).filter(([, v]) => v.kind === 'spare').map(([day]) => `${month}月${day}日`);
+    if (days.length) rows.push(`${p.name || '名前なし'}さん：${days.join('・')}`);
+  }
+  return h('div', {}, h('h3', { text: `余り日の内訳（${result.totals.spare}日）` }),
+    rows.length ? h('ul', {}, rows.map((t) => h('li', { text: t }))) : h('p', { class: 'help', text: '余り日はありません。' }),
+    h('p', { class: 'help', text: '余り日は、人が多すぎて出勤させずに置く日です。公休には数えません。' }));
 }
 
 export function renderStep6(el) {
   const d = app.data;
   append(
     el,
-    ...screenTitle('手順6 シフト表', 'マスを押すと、入れるシフトや休みを選べます。いまは手で作れます。自動で作る・決まりの検査は、このあとの版で使えるようになります。'),
+    ...screenTitle('手順6 シフト表', 'マスを押すと、入れるシフトや休みを選べます。変えるたびに、決まりに合っているかを検査し直します。自動で作るのは、このあとの版で使えるようになります。'),
   );
   if (!d.staff.length) {
     append(el, h('p', { class: 'empty', testid: 'table-empty', text: 'スタッフがいません。手順3 スタッフで、1人以上入れてください。' }));
     return;
   }
+  let result = checkTable(d);
+  let marks = markIndex(d, result);
+  const bandBox = h('div', { class: 'band-box' });
+  const detailBox = h('div', { class: 'band-detail card', testid: 'band-detail', hidden: true });
+  const listBox = h('div');
+  let openKey = null;
+  let need = null;
+
+  const focusItem = (it) => {
+    if (it.staff) grid.focusCell(it.staff, it.day ?? it.from ?? 1);
+    else if (it.shift && it.day != null) document.querySelector(`input.need-cell[data-shift="${it.shift}"][data-day="${it.day}"]`)?.focus();
+    else if (it.day != null && d.staff.length) grid.focusCell(d.staff[0].id, it.day);
+  };
+  const openDetail = (key, btn) => {
+    openKey = openKey === key ? null : key;
+    bandBox.querySelectorAll('button.band-item').forEach((b) => b.setAttribute('aria-expanded', 'false'));
+    detailBox.hidden = !openKey;
+    detailBox.textContent = '';
+    if (openKey) {
+      btn.setAttribute('aria-expanded', 'true');
+      detailBox.append(breakdown(d, result, openKey));
+    }
+  };
+  const drawCheck = () => {
+    bandBox.textContent = '';
+    bandBox.append(countBand(result, { onOpen: openDetail }));
+    listBox.textContent = '';
+    const list = errorList(result, { onFocus: focusItem });
+    if (list) listBox.append(h('h2', { text: 'エラーの一覧' }), h('p', { class: 'help', text: '押すと、そのマスへ動きます。' }), list);
+    if (openKey && !result.tableEmpty) {
+      detailBox.textContent = '';
+      detailBox.append(breakdown(d, result, openKey));
+    } else {
+      openKey = null;
+      detailBox.hidden = true;
+    }
+  };
+  // 変えたあとに検査し直す。announce なら、増えた決まりを知らせる（止めはしない）
+  const recheck = (announce) => {
+    const before = result;
+    result = checkTable(app.data);
+    marks = markIndex(app.data, result);
+    grid.refreshAll();
+    need?.refresh();
+    drawCheck();
+    const w = announce ? worsened(before, result) : [];
+    if (w.length) notify(`悪くなりました：${w.join('、')}`, { kind: 'warn', testid: 'worse-notice' });
+  };
+
   const grid = staffGrid({
     data: d,
     testid: 'shift-grid',
     cellTestid: 'table-cell',
-    cell: (p, day) => tableCell(d, p, day),
-    onPick: (p, day, btn) => openPicker(p, day, grid.refresh, btn),
+    cell: (p, day) => tableCell(d, p, day, marks),
+    onPick: (p, day, btn) => openPicker(p, day, recheck, btn),
+    rowMark: (p) => headMark(marks.get(`n|${p.id}`)),
+    dayMark: (day) => headMark(marks.get(`d|${day}`)),
   });
+  drawCheck();
+  if (d.settings.shifts.length) need = needGrid({ assigned: assignedCounter(d), onChange: () => recheck(true) });
   append(
     el,
     h(
       'section',
       { class: 'card' },
+      bandBox,
+      detailBox,
       h('p', { class: 'help', text: '行がスタッフ、列が日です。表は横に動かせます。夜勤を入れると、次の日が空いていれば「明け」が入ります。' }),
       legend(d),
       grid.el,
     ),
+    h('section', { class: 'card', testid: 'error-list-section' }, listBox),
+    need
+      ? h(
+          'section',
+          { class: 'card' },
+          h('h2', { text: '日ごとの必要人数と、配置した人数' }),
+          h('p', { class: 'help', text: '上の数は必要人数（手順2と同じ入れ方で変えられます）。下の「配置」は、シフト表で入れた人数です。' }),
+          need.el,
+        )
+      : null,
   );
 }

@@ -1,26 +1,26 @@
 // 起動と、画面の切り替え。
-import { app, setRenderers } from './state.js?v=2.1';
-import { loadData, brokenCopy, getPref, setPref, KEYS, parseData } from './storage.js?v=2.1';
-import { APP_VERSION } from './version.js?v=2.1';
-import { h, clear } from './dom.js?v=2.1';
-import { notify, clearNotices } from './dialog.js?v=2.1';
-import { exportRaw } from './files.js?v=2.1';
-import { monthLabel, timeLabel } from './calendar.js?v=2.1';
-import { renderWelcome } from './screens/welcome.js?v=2.1';
-import { renderStep1 } from './screens/step1.js?v=2.1';
-import { renderStep2 } from './screens/step2.js?v=2.1';
-import { renderStep3 } from './screens/step3.js?v=2.1';
-import { renderPending } from './screens/pending.js?v=2.1';
-import { renderStep4 } from './screens/step4.js?v=2.1';
-import { renderStep6 } from './screens/step6.js?v=2.1';
-import { openDataPanel } from './screens/datapanel.js?v=2.1';
+import { app, setRenderers } from './state.js?v=2.2';
+import { loadData, brokenCopy, getPref, setPref, KEYS, parseData } from './storage.js?v=2.2';
+import { APP_VERSION } from './version.js?v=2.2';
+import { h, clear } from './dom.js?v=2.2';
+import { notify, clearNotices } from './dialog.js?v=2.2';
+import { exportRaw } from './files.js?v=2.2';
+import { monthLabel, timeLabel } from './calendar.js?v=2.2';
+import { renderWelcome } from './screens/welcome.js?v=2.2';
+import { renderStep1 } from './screens/step1.js?v=2.2';
+import { renderStep2 } from './screens/step2.js?v=2.2';
+import { renderStep3 } from './screens/step3.js?v=2.2';
+import { renderPending } from './screens/pending.js?v=2.2';
+import { renderStep4 } from './screens/step4.js?v=2.2';
+import { renderStep6 } from './screens/step6.js?v=2.2';
+import { openDataPanel } from './screens/datapanel.js?v=2.2';
 
 const STEPS = [
   { n: 1, title: '基本設定', render: renderStep1 },
   { n: 2, title: 'シフトの種類', render: renderStep2 },
   { n: 3, title: 'スタッフ', render: renderStep3 },
   { n: 4, title: '希望の入力', render: renderStep4 },
-  { n: 5, title: '自動で作る', render: (el) => renderPending(el, '自動で作る', 'later') },
+  { n: 5, title: '自動で作る', render: (el) => renderPending(el, '手順5 自動で作る', 'later') },
   { n: 6, title: 'シフト表', render: renderStep6 },
 ];
 

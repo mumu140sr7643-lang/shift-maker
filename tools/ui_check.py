@@ -17,6 +17,7 @@
   - 希望の入力（記号を選んでマスを押す・消す・キーボード）、シフト表（選ぶ小窓・夜勤の次の日の明け・固定）
   - 2月と12月・スタッフ 50 人の作り物の月で、崩れず、マスを押してから 0.3 秒以内に小窓が出るか
   - 書き出し・取り込み（同じ中身になる・控えに残る・まずいファイルや大きすぎるファイルを断る・名前の HTML が動かない）
+  - 検査の画面（空の表の案内・6連勤以上の印と「悪くなりました」・一覧から動く・配置した人数・件数の帯と印が tools/count.mjs と同じ）
   - 保存データが読めないとき、控えを残して知らせるか
 終わりに、結果を JSON で表示する。1 つでも失敗があれば、終わりのコードは 1。
 """
@@ -726,6 +727,90 @@ def scenario_import_more(browser, base):
         ok(not errors, f"エラー0 取り込み 375 {scheme}", " / ".join(errors[:3]))
         ctx.close()
 
+def scenario_check_view(browser, base):
+    """2-2：件数の帯・印・その場で検査し直す・一覧・表の下の必要人数と配置した人数"""
+    import subprocess
+    # 1. 空の表は数えず、案内を出す。手順5の見出し
+    ctx, page, errors = fresh_page(browser, base, 1280, "light")
+    t(page, "sample-restaurant").click()
+    t(page, "step-5").click()
+    ok(t(page, "screen-title").inner_text() == "手順5 自動で作る", "手順5の見出しに「手順5」が付く")
+    t(page, "step-6").click()
+    band = t(page, "count-band")
+    ok(band.get_attribute("data-empty") == "true" and "まだシフト表がありません" in band.inner_text(), "空の表では、エラーの数を出さずに案内を出す")
+    ok(t(page, "error-list").count() == 0, "空の表では、エラーの一覧を出さない")
+
+    # 2. 6日続けて出勤を入れると、6連勤以上が1件になり「悪くなりました」と知らせる
+    data = json.loads(stored(page))
+    p0 = data["staff"][0]
+    sid = p0["shifts"][0]
+    for d in range(1, 7):
+        page.locator(f'[data-testid="table-cell"][data-row="0"][data-day="{d}"]').click()
+        page.locator(f'[data-testid="pick-option"][data-kind="shift"][data-shift="{sid}"]').click()
+    ok(t(page, "count-band").get_attribute("data-empty") == "false", "1マスでも入ると、件数の帯が出る")
+    ok(t(page, "band-six").get_attribute("data-count") == "1", "6日続けて出勤すると、6連勤以上が1件")
+    notices = page.locator('[data-testid="worse-notice"]')
+    ok(notices.count() >= 1 and "6連勤以上 0→1件" in notices.first.inner_text(), "悪くなったら「悪くなりました：6連勤以上 0→1件」と知らせる", notices.first.inner_text() if notices.count() else "")
+    cells6 = page.locator('[data-testid="table-cell"][data-row="0"].m-six')
+    ok(cells6.count() == 6, "6連勤以上のマスに、濃い赤の太い枠", str(cells6.count()))
+    title = page.locator('[data-testid="table-cell"][data-row="0"][data-day="3"]').get_attribute("title") or ""
+    ok("6連勤以上" in title, "マスにマウスを置くと、エラーの文が出る（title）", title[:60])
+
+    # 3. 一覧を押すと、そのマスへ動く
+    item = page.locator('[data-testid="error-group-six"] [data-testid="error-item"]').first
+    item.click()
+    focused = page.evaluate("() => ({ staff: document.activeElement.dataset.staffId, day: document.activeElement.dataset.day })")
+    ok(focused["staff"] == p0["id"] and focused["day"] == "1", "一覧の項目を押すと、そのマスへ動く", json.dumps(focused))
+
+    # 4. 表の下の配置した人数と、足りない日の色
+    emp = p0["employment"]
+    shift = next(s for s in data["settings"]["shifts"] if s["id"] == sid)
+    row_emp = "all" if shift["combine"] else emp
+    span = page.locator(f'[data-testid="need-assigned"][data-shift="{sid}"][data-emp="{row_emp}"][data-day="1"]')
+    ok(span.inner_text().strip() == "配置1", "表の下に、配置した人数が出る", span.inner_text())
+
+    # 5. 不足を押すと内訳が開く
+    t(page, "band-short").click()
+    ok(t(page, "band-detail").is_visible() and "不足の内訳" in t(page, "band-detail").inner_text(), "「不足」を押すと内訳が開く")
+
+    # 6. 表の下で必要人数を変えると、検査し直す
+    before = int(t(page, "band-hard").get_attribute("data-count"))
+    cell = page.locator(f'input.need-cell[data-shift="{sid}"][data-emp="{row_emp}"][data-day="10"]')
+    cell.click()
+    page.keyboard.type("9")
+    page.keyboard.press("Enter")
+    after = int(t(page, "band-hard").get_attribute("data-count"))
+    ok(after != before or t(page, "band-short").get_attribute("data-count") != "0", "表の下で必要人数を変えると、件数が変わる", f"{before}→{after}")
+    ok(not errors, "エラー0 検査の画面", " / ".join(errors[:3]))
+    ctx.close()
+
+    # 7. 作り物の月で、件数の帯と印が tools/count.mjs と同じ
+    for seed in [5, 21]:
+        path = OUT / f"count-{seed}.json"
+        subprocess.run(["node", str(ROOT / "tools/make-sample.mjs"), "--seed", str(seed), "--staff", "15", "--year", "2026", "--month", "11", "--with-table", "--out", str(path)], check=True)
+        counted = json.loads(subprocess.run(["node", str(ROOT / "tools/count.mjs"), str(path)], capture_output=True, text=True, encoding="utf-8", check=True).stdout)
+        text = path.read_text(encoding="utf-8")
+        ctx, page, errors = fresh_page(browser, base, 1280, "light")
+        page.evaluate("(t) => localStorage.setItem('shift-maker:data', t)", text)
+        page.goto(base + "/app/")
+        page.wait_for_selector('[data-testid="screen-title"]')
+        t(page, "step-6").click()
+        band = {k: int(t(page, f"band-{k}").get_attribute("data-count")) for k in ["six", "hard", "soft", "spare", "short"]}
+        want = {"six": counted["totals"]["sixPlus"], "hard": counted["totals"]["hard"], "soft": counted["totals"]["soft"], "spare": counted["totals"]["spare"], "short": counted["totals"]["shortSlots"]}
+        ok(band == want, f"種{seed}：件数の帯が tools/count.mjs と同じ", f"{band} / {want}")
+        staff_ids = [p["id"] for p in json.loads(text)["staff"]]
+        cover = set()
+        for it in counted["items"]:
+            if it["rule"] == "sixPlus":
+                for d in range(max(1, it["from"]), it["to"] + 1):
+                    cover.add((staff_ids.index(it["staff"]), d))
+        got = page.locator('[data-testid="table-cell"].m-six').count()
+        ok(got == len(cover), f"種{seed}：6連勤以上の印のマスの数が、数え方と同じ", f"{got} / {len(cover)}")
+        groups = {lv: int(t(page, f"error-group-{lv}").get_attribute("data-count")) for lv in ["six", "hard", "soft"]}
+        ok(groups == {"six": want["six"], "hard": want["hard"], "soft": want["soft"]}, f"種{seed}：エラーの一覧の数が帯と同じ", json.dumps(groups))
+        ok(not errors, f"エラー0 種{seed}", " / ".join(errors[:3]))
+        ctx.close()
+
 def scenario_month_backup(browser, base):
     ctx, page, errors = fresh_page(browser, base, 1280, "light")
     t(page, "sample-retail").click()
@@ -893,6 +978,7 @@ def main():
         scenario_lock_and_ake(browser, base)
         scenario_import(browser, base)
         scenario_import_more(browser, base)
+        scenario_check_view(browser, base)
         scenario_big(browser, base)
         scenario_add_shift(browser, base)
         scenario_text_safety(browser, base)

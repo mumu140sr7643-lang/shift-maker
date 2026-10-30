@@ -1,6 +1,6 @@
 // データの形と、データを作る・確かめる・直す関数。
 // 画面（DOM）には触らない。ブラウザでも node（確かめの道具）でも同じものを使う。
-import { daysInMonth, weekdayOf } from './calendar.js?v=2.1';
+import { daysInMonth, weekdayOf } from './calendar.js?v=2.2';
 
 // データの形の版。形を変えたら 1 つ上げ、migrate() に古い形を直す手順を足す。
 export const FORMAT_VERSION = 1;

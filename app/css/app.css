@@ -33,6 +33,10 @@
   --k-half-bg: #eaf4dc;
   --k-ake-bg: #e4e4e4;
   --k-spare-bg: #d9f1ee;
+  --mk-six: #7a1010;
+  --mk-hard: #d0261a;
+  --mk-soft: #9a6400;
+  --k-spare-stripe: #a9dcd5;
   color-scheme: light;
 }
 
@@ -71,6 +75,14 @@
     --k-half-bg: #273a1f;
     --k-ake-bg: #34383e;
     --k-spare-bg: #173b38;
+  --mk-six: #ff5c5c;
+  --mk-hard: #ffa198;
+  --mk-soft: #e8c15a;
+  --k-spare-stripe: #24524d;
+    --mk-six: #ff5c5c;
+    --mk-hard: #ffa198;
+    --mk-soft: #e8c15a;
+    --k-spare-stripe: #24524d;
     color-scheme: dark;
   }
 }
@@ -494,6 +506,84 @@ fieldset.field { border: 1px solid var(--border); border-radius: 8px; padding: 8
 .pick-label { font-size: 0.85rem; }
 .pick-note { font-size: 0.75rem; padding: 0 4px; border-radius: 4px; background: var(--warn-bg); color: var(--warn-text); }
 .pick-lock { margin-top: 12px; align-items: flex-start; }
+
+/* 検査の印（形と色で3段階） */
+.grid-cell.m-six { border: 3px solid var(--mk-six); }
+.grid-cell.m-hard { border: 2px solid var(--mk-hard); }
+.grid-cell.m-soft { border: 2px dotted var(--mk-soft); }
+.cell-marks { position: absolute; inset: 0; pointer-events: none; }
+.mk-box { position: absolute; top: 1px; right: 1px; display: flex; gap: 1px; }
+.mk { display: inline-block; width: 7px; height: 7px; flex: none; }
+.mk-six { background: var(--mk-six); }
+.mk-hard { background: var(--mk-hard); border-radius: 50%; }
+.mk-soft { width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-bottom: 7px solid var(--mk-soft); }
+.grid-cell.k-spare, .legend-cell.k-spare {
+  background-color: var(--k-spare-bg);
+  background-image: repeating-linear-gradient(135deg, transparent 0 5px, var(--k-spare-stripe) 5px 8px);
+}
+.legend-cell { position: relative; display: inline-block; width: 1.8em; height: 1.3em; border: 1px solid var(--border); border-radius: 3px; background: var(--surface); }
+.legend-cell.m-six { border: 3px solid var(--mk-six); }
+.legend-cell.m-hard { border: 2px solid var(--mk-hard); }
+.legend-cell.m-soft { border: 2px dotted var(--mk-soft); }
+.legend-cell .mk { position: absolute; top: 1px; right: 1px; }
+.staff-grid th.m-six, .staff-grid th.m-hard, .staff-grid th.m-soft { text-decoration: underline; text-decoration-thickness: 3px; text-underline-offset: 3px; }
+.staff-grid th.m-six { text-decoration-color: var(--mk-six); }
+.staff-grid th.m-hard { text-decoration-color: var(--mk-hard); }
+.staff-grid th.m-soft { text-decoration-color: var(--mk-soft); text-decoration-style: dotted; }
+
+/* 件数の帯 */
+.band { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.band-empty { display: block; padding: 10px 12px; border-radius: 8px; background: var(--info-bg); color: var(--info-text); }
+.band-empty p { margin: 0; }
+.band-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  min-height: 44px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-left-width: 5px;
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+button.band-item { cursor: pointer; }
+.band-num { font-size: 1.3rem; font-weight: 700; }
+.band-label, .band-unit { font-size: 0.9rem; }
+.b-six { border-left-color: var(--mk-six); }
+.b-hard { border-left-color: var(--mk-hard); }
+.b-soft { border-left-color: var(--mk-soft); border-left-style: dotted; }
+.b-spare { border-left-color: var(--k-spare-stripe); }
+.b-short { border-left-color: var(--mk-hard); }
+.band-detail ul { margin: 4px 0; padding-left: 1.2em; }
+
+/* エラーの一覧 */
+.error-list { display: grid; gap: 8px; }
+.error-group > summary { cursor: pointer; font-weight: 600; }
+.error-group ul { list-style: none; padding: 0; margin: 6px 0 0; display: grid; gap: 4px; max-height: 360px; overflow-y: auto; }
+.error-item {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.error-rule { font-weight: 700; }
+.error-group .mk { vertical-align: middle; }
+
+/* 表の下の必要人数と配置した人数 */
+.need-assigned { display: block; font-size: 0.75rem; color: var(--text-muted); line-height: 1.2; }
+.need-grid td.is-short { box-shadow: inset 0 0 0 2px var(--mk-hard); border-radius: 4px; }
+.need-grid td.is-over { box-shadow: inset 0 0 0 2px var(--mk-soft); border-radius: 4px; }
+.swatch-short { border: 2px solid var(--mk-hard); }
 
 /* スタッフ */
 .staff-layout { display: grid; grid-template-columns: minmax(220px, 300px) minmax(0, 1fr); gap: 16px; align-items: start; }

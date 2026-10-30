@@ -114,7 +114,7 @@ export async function makeSample({ seed, staff = null, year = null, month = null
   return d;
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const d = await makeSample({
     seed: Number(arg('seed', 1)),
     staff: arg('staff') ? Number(arg('staff')) : null,

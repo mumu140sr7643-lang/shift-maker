@@ -654,5 +654,49 @@
  {
   "id": "import-notice",
   "find": "import-notice"
+ },
+ {
+  "id": "count-band",
+  "find": "count-band"
+ },
+ {
+  "id": "band-detail",
+  "find": "band-detail"
+ },
+ {
+  "id": "error-list",
+  "find": "error-list"
+ },
+ {
+  "id": "error-list-section",
+  "find": "error-list-section"
+ },
+ {
+  "id": "error-item",
+  "find": "error-item"
+ },
+ {
+  "id": "worse-notice",
+  "find": "worse-notice"
+ },
+ {
+  "id": "need-grid-with-assigned",
+  "find": "need-grid-with-assigned"
+ },
+ {
+  "id": "need-assigned",
+  "find": "need-assigned"
+ },
+ {
+  "id": "grid-row-head",
+  "find": "grid-row-head"
+ },
+ {
+  "id": "band-six / band-hard / band-soft / band-spare / band-short",
+  "find": "'band-six'"
+ },
+ {
+  "id": "error-group-six / -hard / -soft",
+  "find": "testid: `error-group-${lv}`"
  }
 ]

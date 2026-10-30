@@ -1,11 +1,12 @@
-// 日ごとの必要人数の表（手順2。あとでシフト表の下でも使う）。
+// 日ごとの必要人数の表（手順2と、手順6のシフト表の下）。
+// assigned(shiftId, emp, day) を渡すと、各マスの下に配置した人数を出し、足りない・多い日に色を付ける。
 // キーボードで続けて入れられる：押すと数字が選ばれ、打つと置き換わる。
 // Enter で次の日、Shift+Enter で前の日、↑↓ で上下の行、Esc でやめる。
 // Shift を押しながら日を押す（なぞる）と何日か選べ、数字を打って Enter で全部に入る。
-import { h } from '../dom.js?v=2.1';
-import { app, commit } from '../state.js?v=2.1';
-import { needRows, needOn, setNeedOverride, shiftById, monthDays } from '../model.js?v=2.1';
-import { weekdayOf, WEEKDAY_LABELS } from '../calendar.js?v=2.1';
+import { h } from '../dom.js?v=2.2';
+import { app, commit } from '../state.js?v=2.2';
+import { needRows, needOn, setNeedOverride, shiftById, monthDays } from '../model.js?v=2.2';
+import { weekdayOf, WEEKDAY_LABELS } from '../calendar.js?v=2.2';
 
 function rowLabel(d, row) {
   const s = shiftById(d, row.shiftId);
@@ -13,7 +14,7 @@ function rowLabel(d, row) {
   return { symbol: s.symbol, emp };
 }
 
-export function needGrid() {
+export function needGrid({ assigned = null, onChange = null } = {}) {
   const d = app.data;
   const rows = needRows(d);
   const nDays = monthDays(d);
@@ -32,6 +33,14 @@ export function needGrid() {
     const info = needOn(app.data, row.shiftId, row.emp, day);
     input.value = String(info.value);
     input.dataset.stored = String(info.value);
+    if (assigned) {
+      const got = assigned(row.shiftId, row.emp, day);
+      const span = input.parentElement.querySelector('.need-assigned');
+      const td = input.parentElement;
+      span.textContent = got === null ? '―' : `配置${got}`;
+      td.classList.toggle('is-short', got !== null && got < info.value);
+      td.classList.toggle('is-over', got !== null && got > info.value);
+    }
     input.classList.toggle('is-override', info.source === 'override');
     input.classList.toggle('is-rule', info.source === 'rule');
     if (info.source === 'override') {
@@ -74,6 +83,7 @@ export function needGrid() {
       : [day];
     commit((data) => days.forEach((x) => setNeedOverride(data, row.shiftId, row.emp, x, n)));
     days.forEach((x) => paint(r, x));
+    onChange?.();
     const { symbol, emp } = rowLabel(app.data, row);
     say(days.length > 1 ? `${days[0]}日〜${days[days.length - 1]}日の「${symbol}」（${emp}）を${n}人にしました。` : '');
     return true;
@@ -180,17 +190,17 @@ export function needGrid() {
           },
         });
         cells[r][i] = input;
-        return h('td', {}, input);
+        return h('td', {}, input, assigned ? h('span', { class: 'need-assigned', testid: 'need-assigned', dataset: { shift: row.shiftId, emp: row.emp, day: String(day) } }) : null);
       }),
     );
   });
 
   const table = h('table', { class: 'need-grid', on: { mousedown: onMouseDown, mouseover: onMouseOver } }, h('thead', {}, head), h('tbody', {}, body));
-  rows.forEach((_, r) => { for (let day = 1; day <= nDays; day += 1) paint(r, day); });
+  const paintAll = () => rows.forEach((_, r) => { for (let day = 1; day <= nDays; day += 1) paint(r, day); });
 
-  return h(
+  const el = h(
     'div',
-    { testid: 'need-grid' },
+    { testid: assigned ? 'need-grid-with-assigned' : 'need-grid' },
     h('div', { class: 'table-wrap' }, table),
     msg,
     h(
@@ -199,7 +209,10 @@ export function needGrid() {
       h('li', {}, h('span', { class: 'swatch swatch-override' }), 'この日だけ変えた数（マウスを置くと、ふだんの数が出ます）'),
       h('li', {}, h('span', { class: 'swatch swatch-rule' }), '必要人数の決まりで変わった数（点線の下線）'),
       h('li', {}, 'ふだんの数と同じ数を入れると、変えた印が消えます。'),
+      assigned ? h('li', {}, h('span', { class: 'swatch swatch-short' }), '「配置」はシフト表で入れた人数です。必要人数より少ない日は赤い枠、多い日は黄土色の枠です。') : null,
     ),
     h('p', { class: 'help', text: 'キーボードで続けて入れられます：マスを押すと数字が選ばれ、打つと置き換わります。Enter で次の日、Shift+Enter で前の日、↑↓ で上下の行に動きます。Shift を押しながら日を押す（なぞる）と何日か選べ、数字を打って Enter で全部に入ります。Esc でやめます。' }),
   );
+  paintAll();
+  return { el, refresh: paintAll };
 }

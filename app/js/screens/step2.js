@@ -1,10 +1,10 @@
 // 手順2 シフトの種類
-import { h, append, field, select, numberInput, clear } from '../dom.js?v=2.1';
-import { app, commit, rerender } from '../state.js?v=2.1';
-import { GROUP_IDS, LIMITS, symbolProblem, newShift, removeShift, shiftUsage, setCombine } from '../model.js?v=2.1';
-import { ask, form } from '../dialog.js?v=2.1';
-import { screenTitle, section, checkbox, warn } from './common.js?v=2.1';
-import { needGrid } from './needgrid.js?v=2.1';
+import { h, append, field, select, numberInput, clear } from '../dom.js?v=2.2';
+import { app, commit, rerender } from '../state.js?v=2.2';
+import { GROUP_IDS, LIMITS, symbolProblem, newShift, removeShift, shiftUsage, setCombine } from '../model.js?v=2.2';
+import { ask, form } from '../dialog.js?v=2.2';
+import { screenTitle, section, checkbox, warn } from './common.js?v=2.2';
+import { needGrid } from './needgrid.js?v=2.2';
 
 // 開いている「詳細」と折りたたみは、画面を作り直しても開いたままにする
 const openDetails = new Set();
@@ -248,7 +248,7 @@ export function renderStep2(el) {
   const refreshGrid = () => {
     if (!needOpen) return;
     clear(gridBox);
-    gridBox.append(d.settings.shifts.length ? needGrid() : h('p', { class: 'empty', text: 'シフトがありません。上の「シフトを追加」で足すと、ここで日ごとの人数を変えられます。' }));
+    gridBox.append(d.settings.shifts.length ? needGrid().el : h('p', { class: 'empty', text: 'シフトがありません。上の「シフトを追加」で足すと、ここで日ごとの人数を変えられます。' }));
   };
   const details = h(
     'details',
