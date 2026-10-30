@@ -714,5 +714,9 @@
  {
   "id": "request-conflicts",
   "find": "request-conflicts"
+ },
+ {
+  "id": "shift-need-off",
+  "find": "shift-need-off"
  }
 ]

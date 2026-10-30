@@ -1,8 +1,8 @@
 // 決まりの検査と、良し悪しの比べ方（docs/数え方の表.md の 2 章・3 章）。
 // 画面には触らない。ブラウザでも node（tools/count.mjs）でも同じものを使う。
-import { RULES, strengthOf, cellTraits, isRestKind } from './rules.js?v=2.3';
-import { monthDays, shiftById, rankOrder, needOn, cellOf, cellName } from './model.js?v=2.3';
-import { weekdayOf } from './calendar.js?v=2.3';
+import { RULES, strengthOf, cellTraits, isRestKind } from './rules.js?v=2.3.1';
+import { monthDays, shiftById, rankOrder, needOn, cellOf, cellName } from './model.js?v=2.3.1';
+import { weekdayOf } from './calendar.js?v=2.3.1';
 
 const GROUP_IDS = ['early', 'late', 'night'];
 
@@ -112,7 +112,7 @@ export function checkTable(data) {
       const prevShift = p.prevLastShift && p.prevLastShift !== 'off' ? shiftById(data, p.prevLastShift) : null;
       const prevKnown = p.prevConsecutive > 0 || p.prevLastShift !== null;
       const prevClass = !prevKnown ? 'U' : p.prevConsecutive > 0 || prevShift ? 'W' : 'R';
-      const prevGroup = prevShift ? prevShift.group : null;
+      const prevGroup = prevShift ? (prevShift.night ? 'night' : prevShift.group) : null;
       const cls = (d) => (d === 0 ? prevClass : tr(d).single);
       const groupAt = (d) => (d === 0 ? prevGroup : tr(d).group);
 
@@ -249,8 +249,9 @@ export function checkTable(data) {
       }
       for (const [day, r] of Object.entries(data.month.requests[p.id] ?? {})) {
         const c = v(Number(day));
+        // 空きのマスは、まだ作っていないだけなので数えない
         const same = c && c.kind === r.kind && (r.kind !== 'shift' || c.shift === r.shift);
-        if (!same) add('requestDiff', { staff: p.id, day: Number(day), text: `${who(p)}の${md(Number(day))}は、希望が「${cellName(data, r)}」ですが、表は「${cellName(data, c)}」です` });
+        if (c && !same) add('requestDiff', { staff: p.id, day: Number(day), text: `${who(p)}の${md(Number(day))}は、希望が「${cellName(data, r)}」ですが、表は「${cellName(data, c)}」です` });
       }
     }
   }

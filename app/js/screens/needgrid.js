@@ -3,10 +3,10 @@
 // キーボードで続けて入れられる：押すと数字が選ばれ、打つと置き換わる。
 // Enter で次の日、Shift+Enter で前の日、↑↓ で上下の行、Esc でやめる。
 // Shift を押しながら日を押す（なぞる）と何日か選べ、数字を打って Enter で全部に入る。
-import { h } from '../dom.js?v=2.3';
-import { app, commit } from '../state.js?v=2.3';
-import { needRows, needOn, setNeedOverride, shiftById, monthDays } from '../model.js?v=2.3';
-import { weekdayOf, WEEKDAY_LABELS } from '../calendar.js?v=2.3';
+import { h } from '../dom.js?v=2.3.1';
+import { app, commit } from '../state.js?v=2.3.1';
+import { needRows, needOn, setNeedOverride, shiftById, monthDays } from '../model.js?v=2.3.1';
+import { weekdayOf, WEEKDAY_LABELS } from '../calendar.js?v=2.3.1';
 
 function rowLabel(d, row) {
   const s = shiftById(d, row.shiftId);
@@ -16,7 +16,12 @@ function rowLabel(d, row) {
 
 export function needGrid({ assigned = null, onChange = null } = {}) {
   const d = app.data;
-  const rows = needRows(d);
+  // 人数に数えないシフト・研修のシフトは、必要人数を見ないので出さない
+  const rows = needRows(d).filter((r) => {
+    const s = shiftById(d, r.shiftId);
+    return s.counts && !s.training;
+  });
+  const skipped = d.settings.shifts.filter((s) => !s.counts || s.training).map((s) => s.symbol);
   const nDays = monthDays(d);
   const { year, month } = d.month;
   const msg = h('p', { class: 'grid-msg', role: 'status', testid: 'need-grid-message' });
@@ -209,6 +214,7 @@ export function needGrid({ assigned = null, onChange = null } = {}) {
       h('li', {}, h('span', { class: 'swatch swatch-override' }), 'この日だけ変えた数（マウスを置くと、ふだんの数が出ます）'),
       h('li', {}, h('span', { class: 'swatch swatch-rule' }), '必要人数の決まりで変わった数（点線の下線）'),
       h('li', {}, 'ふだんの数と同じ数を入れると、変えた印が消えます。'),
+      skipped.length ? h('li', {}, `人数に数えないシフト（${skipped.join('・')}）は、必要人数を見ないので、ここには出しません。`) : null,
       assigned ? h('li', {}, h('span', { class: 'swatch swatch-short' }), '「配置」はシフト表で入れた人数です。必要人数より少ない日は赤い枠、多い日は黄土色の枠です。') : null,
     ),
     h('p', { class: 'help', text: 'キーボードで続けて入れられます：マスを押すと数字が選ばれ、打つと置き換わります。Enter で次の日、Shift+Enter で前の日、↑↓ で上下の行に動きます。Shift を押しながら日を押す（なぞる）と何日か選べ、数字を打って Enter で全部に入ります。Esc でやめます。' }),

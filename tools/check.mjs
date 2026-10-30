@@ -305,6 +305,10 @@ const check = (name, problems) => results.push({ name, problems });
     expect('相談1 公休の希望の日に有給は「希望と違う」', n(x.d, 'requestDiff'), 1);
     put(x.d, x.p.id, [S(x.E), K('off')]);
     expect('相談1 同じなら0', n(x.d, 'requestDiff'), 0);
+    delete x.d.month.table[x.p.id][2];
+    expect('相談1 表のマスが空きなら数えない', n(x.d, 'requestDiff'), 0);
+    put(x.d, x.p.id, [S(x.E)], 2);
+    expect('相談1 公休の希望の日に早番なら1件', n(x.d, 'requestDiff'), 1);
     expect('相談1 強さは選べない（絶対）', C.checkTable(x.d).byRule.requestDiff.strength, 'hard');
   }
   // 相談2：遅い→早いの間の2連休が足りない（別の決まり。同じ組を両方に数えない）
@@ -369,6 +373,19 @@ const check = (name, problems) => results.push({ name, problems });
     z.p.prevConsecutive = 1;
     put(z.d, z.p.id, [K('ake')]);
     expect('前の月の最後が夜勤で、1日が明け', n(z.d, 'nightNext'), 0);
+  }
+  // 夜勤のシフトの時間帯のグループを「遅い」にしてあっても、遅い→早いには数えない（夜勤の次の日だけ）
+  {
+    const x = base();
+    x.N.group = 'late';
+    put(x.d, x.p.id, [S(x.N), S(x.E)], 10);
+    expect('グループが「遅い」の夜勤の次の日に早番', [n(x.d, 'nightNext'), n(x.d, 'lateToEarly')], [1, 0]);
+    const y = base();
+    y.N.group = 'late';
+    y.p.prevLastShift = y.N.id;
+    y.p.prevConsecutive = 1;
+    put(y.d, y.p.id, [S(y.E)]);
+    expect('前の月の最後がグループ「遅い」の夜勤で、1日が早番', [n(y.d, 'nightNext'), n(y.d, 'lateToEarly')], [1, 0]);
   }
   // 責任者の順位（いちばん上の人が2人以上なら、だれか1人が役に入っていればよい）
   {

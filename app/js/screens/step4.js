@@ -1,11 +1,11 @@
 // 手順4 希望の入力：上の記号を選んでから、表のマスを押すと入る。
-import { h, append } from '../dom.js?v=2.3';
-import { app, commit } from '../state.js?v=2.3';
-import { REST_KINDS, shiftById, requestOf, setRequest, cellSymbol, cellName } from '../model.js?v=2.3';
-import { screenTitle } from './common.js?v=2.3';
-import { requestConflicts } from '../check.js?v=2.3';
-import { RULE_BY_ID } from '../rules.js?v=2.3';
-import { staffGrid } from './staffgrid.js?v=2.3';
+import { h, append } from '../dom.js?v=2.3.1';
+import { app, commit } from '../state.js?v=2.3.1';
+import { REST_KINDS, shiftById, requestOf, setRequest, cellSymbol, cellName } from '../model.js?v=2.3.1';
+import { screenTitle } from './common.js?v=2.3.1';
+import { requestConflicts } from '../check.js?v=2.3.1';
+import { RULE_BY_ID } from '../rules.js?v=2.3.1';
+import { staffGrid } from './staffgrid.js?v=2.3.1';
 
 // 選んでいる記号（画面を作り直しても残す）。'off' | 'paid' | 'half' | シフトの番号 | 'clear'
 let brush = 'off';

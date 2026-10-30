@@ -1,16 +1,16 @@
 // 手順1 基本設定
-import { h, append, field, select, numberInput } from '../dom.js?v=2.3';
-import { app, commit } from '../state.js?v=2.3';
+import { h, append, field, select, numberInput } from '../dom.js?v=2.3.1';
+import { app, commit } from '../state.js?v=2.3.1';
 import {
   GROUP_IDS, LIMITS, newRank, newSkill, newSpecialDay, staffWithRank, removeRank, removeSkill,
   monthHasContent, switchMonth, monthDays, shiftById,
-} from '../model.js?v=2.3';
-import { monthLabel, weekdayOf, WEEKDAY_LABELS, isNextMonth } from '../calendar.js?v=2.3';
-import { ask, notify } from '../dialog.js?v=2.3';
-import { takeBackup, backupLines } from '../backup.js?v=2.3';
-import { exportData } from '../files.js?v=2.3';
-import { screenTitle, section, checkbox, textInput, warn } from './common.js?v=2.3';
-import { RULES, RULE_GROUPS, strengthOf, setStrength } from '../rules.js?v=2.3';
+} from '../model.js?v=2.3.1';
+import { monthLabel, weekdayOf, WEEKDAY_LABELS, isNextMonth } from '../calendar.js?v=2.3.1';
+import { ask, notify } from '../dialog.js?v=2.3.1';
+import { takeBackup, backupLines } from '../backup.js?v=2.3.1';
+import { exportData } from '../files.js?v=2.3.1';
+import { screenTitle, section, checkbox, textInput, warn } from './common.js?v=2.3.1';
+import { RULES, RULE_GROUPS, strengthOf, setStrength } from '../rules.js?v=2.3.1';
 
 function monthValue(y, m) {
   return `${y}-${String(m).padStart(2, '0')}`;
@@ -375,7 +375,7 @@ function strengthRows(d0) {
           { class: 'strength-row', testid: 'strength-row', dataset: { rule: r.id } },
           h('div', { class: 'strength-name' }, h('span', { class: 'strength-title', text: r.name }), h('span', { class: 'help', text: r.help })),
           r.fixed
-            ? h('span', { class: 'strength-fixed', testid: `strength-${r.id}`, text: r.strength === 'always' ? 'いつも数える（変えられない）' : '絶対（変えられない）' })
+            ? h('span', { class: 'strength-fixed', testid: `strength-${r.id}`, text: `${r.strength === 'always' ? 'いつも数える' : '絶対'}（${r.why}、変えられません）` })
             : select(options, strengthOf(d0, r.id), {
                 'aria-label': `「${r.name}」の強さ`,
                 testid: `strength-${r.id}`,

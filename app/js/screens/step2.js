@@ -1,10 +1,10 @@
 // 手順2 シフトの種類
-import { h, append, field, select, numberInput, clear } from '../dom.js?v=2.3';
-import { app, commit, rerender } from '../state.js?v=2.3';
-import { GROUP_IDS, LIMITS, symbolProblem, newShift, removeShift, shiftUsage, setCombine } from '../model.js?v=2.3';
-import { ask, form } from '../dialog.js?v=2.3';
-import { screenTitle, section, checkbox, warn } from './common.js?v=2.3';
-import { needGrid } from './needgrid.js?v=2.3';
+import { h, append, field, select, numberInput, clear } from '../dom.js?v=2.3.1';
+import { app, commit, rerender } from '../state.js?v=2.3.1';
+import { GROUP_IDS, LIMITS, symbolProblem, newShift, removeShift, shiftUsage, setCombine } from '../model.js?v=2.3.1';
+import { ask, form } from '../dialog.js?v=2.3.1';
+import { screenTitle, section, checkbox, warn } from './common.js?v=2.3.1';
+import { needGrid } from './needgrid.js?v=2.3.1';
 
 // 開いている「詳細」と折りたたみは、画面を作り直しても開いたままにする
 const openDetails = new Set();
@@ -90,7 +90,9 @@ function shiftRows(refreshGrid) {
         onBad: warn,
         onChange: (n) => commit((x) => { x.settings.shifts[i].hours = n; }),
       })),
-      s.combine
+      !s.counts || s.training
+        ? h('td', { colspan: 2, 'data-label': 'ふだんの必要人数' }, h('span', { class: 'help need-off', testid: 'shift-need-off', text: '人数に数えないシフトなので、必要人数は見ません' }))
+        : s.combine
         ? h('td', { colspan: 2, 'data-label': 'ふだんの必要人数（合わせて）' }, h('span', { class: 'inline-label', text: '合わせて' }), needNum('all', '合わせて'))
         : [
             h('td', { 'data-label': `ふだんの必要人数（${names.full}）` }, needNum('full', names.full)),
@@ -109,7 +111,7 @@ function shiftRows(refreshGrid) {
           const t = x.settings.shifts[i];
           t[key] = v;
           if (key === 'training' && v) t.counts = false;
-        }, { render: key === 'training' }), { testid, ...extra }),
+        }, { render: key === 'training' || key === 'counts' }), { testid, ...extra }),
         help ? h('p', { class: 'help', text: help }) : null,
       );
     const color = h('input', { type: 'color', value: s.color, testid: 'shift-color', id: `color-${s.id}` });
@@ -147,7 +149,7 @@ function shiftRows(refreshGrid) {
           { class: 'detail-grid' },
           flag('counts', '人数に数える', '外すと、このシフトに入った人は必要人数に数えません。', 'shift-counts', { disabled: s.training }),
           flag('training', '研修扱い（人数に数えない出勤）', '出勤した日に数えますが、人数とスキルには数えません。', 'shift-training'),
-          flag('night', '夜勤（次の日は明け）', '夜勤の次の日は「明け（明）」になり、ほかのシフトは入りません。', 'shift-night'),
+          flag('night', '夜勤（次の日は明け）', '夜勤の次の日は「明け（明）」になり、ほかのシフトは入りません。遅い→早いなどの決まりでは、時間帯のグループに関係なく「夜」として数えます。', 'shift-night'),
           flag('onePerDay', '1日1人の役', '「その時間帯の責任者」のように、1日に1人だけ入る役です。', 'shift-one-per-day'),
           h(
             'div',

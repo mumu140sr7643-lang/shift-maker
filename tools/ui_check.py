@@ -874,6 +874,26 @@ def scenario_strengths(browser, base):
     ok(not errors, "エラー0 決まりの強さ 375", " / ".join(errors[:3]))
     ctx.close()
 
+def scenario_noncount(browser, base):
+    """人数に数えないシフトは、必要人数の欄を出さない。選べない決まりに理由が出る"""
+    ctx, page, errors = fresh_page(browser, base, 1280, "light")
+    t(page, "sample-restaurant").click()
+    data = json.loads(stored(page))
+    sid = data["settings"]["shifts"][1]["id"]
+    t(page, "step-2").click()
+    page.locator(f'[data-testid="shift-row"][data-shift-id="{sid}"] [data-testid="shift-detail-toggle"]').click()
+    t(page, "shift-counts").uncheck()
+    row = page.locator(f'[data-testid="shift-row"][data-shift-id="{sid}"]')
+    ok(row.locator('[data-testid="shift-need-off"]').count() == 1 and row.locator('[data-testid^="shift-need-"] >> visible=true').count() == 1, "人数に数えないシフトは、必要人数の欄の代わりに説明を出す")
+    page.locator('[data-testid="need-details"] > summary').click()
+    ok(page.locator(f'input.need-cell[data-shift="{sid}"]').count() == 0, "人数に数えないシフトは、日ごとの必要人数の表に出さない")
+    ok("人数に数えないシフト" in t(page, "need-grid").inner_text(), "出さないシフトがあることを書く")
+    t(page, "step-1").click()
+    page.locator('[data-testid="step1-details"] > summary').click()
+    ok("働きすぎを見のがさないため" in t(page, "strength-sixPlus").inner_text(), "選べない決まりに、理由を出す")
+    ok(not errors, "エラー0 人数に数えないシフト", " / ".join(errors[:3]))
+    ctx.close()
+
 def scenario_month_backup(browser, base):
     ctx, page, errors = fresh_page(browser, base, 1280, "light")
     t(page, "sample-retail").click()
@@ -1043,6 +1063,7 @@ def main():
         scenario_import_more(browser, base)
         scenario_check_view(browser, base)
         scenario_strengths(browser, base)
+        scenario_noncount(browser, base)
         scenario_big(browser, base)
         scenario_add_shift(browser, base)
         scenario_text_safety(browser, base)
