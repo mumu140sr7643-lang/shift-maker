@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 export const ROOT = fileURLToPath(new URL('..', import.meta.url));
 
 // 読み込むファイルの名前と、その ?v= を見つける
-export const VERSION_RE = /([\w./-]+\.(?:js|css))\?v=([0-9][0-9A-Za-z.-]*)/g;
+export const VERSION_RE = /([\w./-]+\.(?:mjs|js|css|wasm))\?v=([0-9][0-9A-Za-z.-]*)/g;
 
 function walk(dir, out) {
   for (const name of readdirSync(dir)) {

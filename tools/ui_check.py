@@ -20,8 +20,10 @@
   - 検査の画面（空の表の案内・6連勤以上の印と「悪くなりました」・一覧から動く・配置した人数・件数の帯と印が tools/count.mjs と同じ）
   - 決まりの強さ（手順1のチェックと1つの値・強さで件数が移る）と、希望だけで必ずエラーになるものの知らせ
   - 保存データが読めないとき、控えを残して知らせるか
+  - 自動で作る（中止で前のまま・計算中はほかを押せない・進み具合・件数の帯が check.js と同じ・置きかえる前の控えから戻る・記録 20 回まで・別のタブで変えたら上書きしない・作る前の確かめ）
 終わりに、結果を JSON で表示する。1 つでも失敗があれば、終わりのコードは 1。
 """
+import calendar
 import json
 import sys
 import threading
@@ -1045,6 +1047,163 @@ def scenario_broken(browser, base):
     ctx.close()
 
 
+def scenario_generate(browser, base):
+    """3-2：手順5 自動で作る（中止・作る・控え・記録 20 回・別のタブ・作る前の確かめ）。1分を ?seconds=6 に短くして確かめる"""
+    url = base + "/app/?seconds=6"
+    ctx, page, errors = fresh_page(browser, base, 1280, "light")
+    page.goto(url)
+    t(page, "sample-restaurant").click()
+    t(page, "step-5").click()
+    ok(t(page, "precheck-ok").count() == 1, "見本では、作る前の確かめにぶつかりが無いと出る")
+    ok(t(page, "mode-quick").is_checked() and t(page, "mode-careful").is_disabled(), "1分で作るが選ばれ、じっくり作るはまだ選べない")
+    before = stored(page)
+
+    # 1. 中止すると、表は前のまま。計算中は、ほかの所を押せない
+    t(page, "generate").click()
+    page.wait_for_selector('[data-testid="run-dialog"]')
+    page.wait_for_function("() => document.querySelector('[data-testid=run-stage]').textContent.includes('いまの段')", timeout=20000)
+    blocked = False
+    try:
+        t(page, "step-6").click(timeout=800)
+    except Exception:
+        blocked = True
+    ok(blocked, "計算中は、手順の移動を押せない")
+    ok(t(page, "screen-title").inner_text() == "手順5 自動で作る", "計算中に手順が変わらない")
+    t(page, "run-stop").click()
+    ok(t(page, "run-dialog").count() == 0 and t(page, "run-stopped").count() == 1, "中止で小窓が閉じ、「中止しました」と出る")
+    ok(stored(page) == before, "中止すると、データは1文字も変わらない")
+
+    # 2. 作る：進み具合が出て、作り終えたら表が入り、件数の帯が check.js と同じ
+    t(page, "generate").click()
+    page.wait_for_function("() => (document.querySelector('[data-testid=run-best]')?.dataset.hard ?? '') !== ''", timeout=30000)
+    ok("いまのいちばん良い答え：6連勤以上" in t(page, "run-best").inner_text(), "段が終わると、いまのいちばん良い答えの件数が出る")
+    ok("秒たちました（あと最大" in t(page, "run-time").inner_text(), "たった秒と、あと最大何秒かが出る")
+    page.wait_for_selector('[data-testid="run-result"]', timeout=60000)
+    data = json.loads(stored(page))
+    ok(len(data["month"]["runs"]) == 1, "作った記録が1つ増える")
+    filled = sum(len(r) for r in data["month"]["table"].values())
+    days = calendar.monthrange(data["month"]["year"], data["month"]["month"])[1]
+    ok(filled == len(data["staff"]) * days, "全員の全部の日にマスが入る", str(filled))
+    counted = page.evaluate(
+        """async () => {
+          const v = document.querySelector('[data-testid="app-version"]').textContent.replace('版 ', '');
+          const C = await import(`./js/check.js?v=${v}`);
+          const res = C.checkTable(JSON.parse(localStorage.getItem('shift-maker:data')));
+          return { totals: res.totals, requestDiff: res.byRule.requestDiff.count, notAssigned: res.byRule.notAssigned.count, nightNext: res.byRule.nightNext.count };
+        }"""
+    )
+    band = {k: t(page, f"band-{k}").get_attribute("data-count") for k in ["six", "hard", "soft", "spare", "short"]}
+    want = {k: str(counted["totals"][x]) for k, x in [("six", "sixPlus"), ("hard", "hard"), ("soft", "soft"), ("spare", "spare"), ("short", "shortSlots")]}
+    ok(band == want, "作った結果の件数の帯が、check.js で数えた数と同じ", f"{band} / {want}")
+    ok(counted["requestDiff"] == 0 and counted["notAssigned"] == 0 and counted["nightNext"] == 0, "希望と違う・担当外・夜勤の次の日が 0件", json.dumps(counted))
+    status = t(page, "run-status").inner_text()
+    finished = t(page, "run-result").get_attribute("data-finished")
+    all_solved = all(s["status"] == "solved" for s in data["month"]["runs"][-1]["stages"])
+    ok((finished == "true") == all_solved and (("最後まで解ききりました" in status) == all_solved), "最後まで解ききったか・時間切れかが、段の記録と合う", status[:40])
+    look(page, "light 1280 手順5 作った結果", "step5-result-light-1280")
+
+    # 3. もう一度作ると、置きかえる前に確かめて控えを残す。控えから1文字も違わずに戻る
+    first = stored(page)
+    t(page, "run-again").click()
+    text = t(page, "generate-confirm").inner_text()
+    ok("置きかわります" in text and "控えに残します" in text, "表があるときは、置きかえることと控えに残すことを確かめる", text[:80])
+    t(page, "generate-ok").click()
+    page.wait_for_function("() => JSON.parse(localStorage.getItem('shift-maker:data')).month.runs.length === 2", timeout=60000)
+    bid = backup_id_of(page, first)
+    ok(bid is not None, "作る前のデータが控えに残る")
+    reasons = page.evaluate("() => JSON.parse(localStorage.getItem('shift-maker:backups')).map((b) => b.reason)")
+    ok("generate" in reasons, "控えの理由は「自動で作る前」")
+    if bid:
+        t(page, "data-button").click()
+        page.locator(f'[data-testid="restore-backup"][data-backup-id="{bid}"]').click()
+        t(page, "restore-backup-ok").click()
+        ok(stored(page) == first, "控えから、作る前のデータが1文字も違わずに戻る")
+
+    # 4. 記録は新しい 20 回ぶんまで
+    page.evaluate(
+        """() => {
+          const d = JSON.parse(localStorage.getItem('shift-maker:data'));
+          d.month.runs = Array.from({ length: 20 }, (_, i) => ({ at: `2026-10-01T00:${String(i).padStart(2, '0')}:00.000Z`, mode: 'quick', seconds: 1, finished: false, stages: [] }));
+          localStorage.setItem('shift-maker:data', JSON.stringify(d));
+        }"""
+    )
+    page.goto(url)
+    page.wait_for_selector('[data-testid="generate"]')
+    t(page, "generate").click()
+    t(page, "generate-ok").click()
+    page.wait_for_selector('[data-testid="run-done"]', timeout=60000)
+    runs = json.loads(stored(page))["month"]["runs"]
+    ok(len(runs) == 20 and runs[0]["at"] == "2026-10-01T00:01:00.000Z", "記録は新しい 20 回ぶんまで（いちばん古いものが消える）", f"{len(runs)} {runs[0].get('at')}")
+    ok(runs[-1].get("seed") is not None, "記録の最後が、いま作ったもの")
+
+    # 5. 計算のあいだに別のタブで変えたら、作った表で上書きしない
+    page2 = ctx.new_page()
+    page2.goto(url)
+    page2.wait_for_selector('[data-testid="screen-title"]')
+    t(page, "generate").click()
+    t(page, "generate-ok").click()
+    page.wait_for_selector('[data-testid="run-dialog"]')
+    changed = page2.evaluate(
+        """() => {
+          const d = JSON.parse(localStorage.getItem('shift-maker:data'));
+          d.staff[0].name = 'ZZ';
+          const text = JSON.stringify(d);
+          localStorage.setItem('shift-maker:data', text);
+          return text;
+        }"""
+    )
+    page.wait_for_selector('[data-testid="run-changed"]', timeout=60000)
+    ok(stored(page) == changed, "別のタブで変えた内容が残り、作った表で上書きしない")
+    page2.close()
+    ok(not errors, "エラー0 自動で作る", " / ".join(errors[:3]))
+    ctx.close()
+
+    # 6. 作る前の確かめ：止めるもの（固定と希望が違う）と、止めずに知らせるもの（避けられない 6連勤以上）
+    ctx, page, errors = fresh_page(browser, base, 375, "dark")
+    page.goto(url)
+    t(page, "sample-restaurant").click()
+    page.evaluate(
+        """() => {
+          const d = JSON.parse(localStorage.getItem('shift-maker:data'));
+          const p = d.staff[0];
+          const sid = p.shifts.find((id) => !d.settings.shifts.find((s) => s.id === id).night);
+          d.month.requests[p.id] = { ...(d.month.requests[p.id] || {}), 3: { kind: 'off' } };
+          d.month.table[p.id] = { 3: { kind: 'shift', shift: sid } };
+          d.month.marks[p.id] = { 3: { locked: true } };
+          localStorage.setItem('shift-maker:data', JSON.stringify(d));
+        }"""
+    )
+    page.goto(url)
+    go(page, 5, 375)
+    ok(t(page, "solve-blockers").count() == 1 and t(page, "generate").is_disabled() and t(page, "generate-why").count() == 1, "固定と希望が違うと、作れない理由を出して「シフトを作る」を押せない")
+    look(page, "dark 375 手順5 作れないとき", "step5-blockers-dark-375")
+    page.evaluate(
+        """() => {
+          const d = JSON.parse(localStorage.getItem('shift-maker:data'));
+          const p = d.staff[0];
+          const sid = p.shifts.find((id) => !d.settings.shifts.find((s) => s.id === id).night);
+          d.month.requests[p.id] = { 1: { kind: 'shift', shift: sid } };
+          d.month.table = {};
+          d.month.marks = {};
+          p.prevConsecutive = 6;
+          p.prevLastShift = sid;
+          localStorage.setItem('shift-maker:data', JSON.stringify(d));
+        }"""
+    )
+    page.goto(url)
+    page.wait_for_selector('[data-testid="generate"]')
+    ok(t(page, "solve-unavoidable").count() == 1 and "6連勤以上" in t(page, "solve-unavoidable").inner_text() and t(page, "generate").is_enabled(), "避けられない 6連勤以上は、止めずに知らせる（押せる）")
+    t(page, "generate").click()
+    page.wait_for_selector('[data-testid="run-dialog"]')
+    look(page, "dark 375 手順5 計算中", "step5-running-dark-375")
+    page.wait_for_selector('[data-testid="run-result"]', timeout=60000)
+    six = t(page, "band-six").get_attribute("data-count")
+    ok(six == "1", "避けられない 6連勤以上は 1件だけ（ほかに作らない）", str(six))
+    look(page, "dark 375 手順5 作った結果", "step5-result-dark-375")
+    ok(not errors, "エラー0 作る前の確かめ", " / ".join(errors[:3]))
+    ctx.close()
+
+
 def main():
     with Server() as srv, sync_playwright() as pw:
         base = f"http://127.0.0.1:{srv.port}"
@@ -1068,6 +1227,7 @@ def main():
         scenario_add_shift(browser, base)
         scenario_text_safety(browser, base)
         scenario_broken(browser, base)
+        scenario_generate(browser, base)
         browser.close()
     print(json.dumps({"ブラウザ": CHANNEL or "chromium", "合格": len(results["pass"]), "不合格": results["fail"]}, ensure_ascii=False, indent=2))
     sys.exit(1 if results["fail"] else 0)

@@ -27,7 +27,9 @@ const check = (name, problems) => results.push({ name, problems });
     for (const m of text.matchAll(VERSION_RE)) if (m[2] !== APP_VERSION) problems.push(`${rel(f)}: ${m[0]}（アプリの版は ${APP_VERSION}）`);
     const imports = [...text.matchAll(/(?:from\s+|import\s*\(\s*)['"](\.{1,2}\/[^'"]+)['"]/g)].map((m) => m[1]);
     const tags = [...text.matchAll(/(?:src|href)="([^"]+\.(?:js|css)[^"]*)"/g)].map((m) => m[1]);
-    for (const spec of [...imports, ...tags]) if (!/\?v=/.test(spec)) problems.push(`${rel(f)}: ${spec} に ?v= がありません`);
+    // Worker や HiGHS の .wasm のように、new URL('…', import.meta.url) で読み込むもの
+    const urls = [...text.matchAll(/new URL\(\s*['"](\.{1,2}\/[^'"]+)['"]/g)].map((m) => m[1]);
+    for (const spec of [...imports, ...tags, ...urls]) if (!/\?v=/.test(spec)) problems.push(`${rel(f)}: ${spec} に ?v= がありません`);
   }
   check('版の番号（?v=）', problems);
 }
@@ -519,9 +521,35 @@ const check = (name, problems) => results.push({ name, problems });
     const x = mk();
     for (const day of [1, 2, 3]) lock(x.d, x.p.id, day, { kind: 'shift', shift: x.E.id });
     x.d.month.requests[x.p.id] = { 4: { kind: 'shift', shift: x.E.id }, 5: { kind: 'shift', shift: x.E.id }, 6: { kind: 'shift', shift: x.E.id } };
-    if (!rules(x.d).includes('sixPlus')) problems.push('固定と希望を合わせて6日続けて出勤なのに、6連勤以上を知らせない');
+    if (rules(x.d).includes('sixPlus')) problems.push('6連勤以上は式で量を減らすだけなので、解く前に止めない');
+    if (!C.unavoidableErrors(x.d).some((it) => it.rule === 'sixPlus')) problems.push('固定と希望を合わせて6日続けて出勤なのに、避けられないエラーとして6連勤以上を知らせない');
   }
-  check('解く前のぶつかり（固定したマスも入れる）', problems);
+  {
+    // 夜勤の次の日が決まっていなければ明けになる（式で縛る）ので、明けも出勤に数えて避けられない連勤を出す
+    const x = mk();
+    lock(x.d, x.p.id, 1, { kind: 'shift', shift: x.N.id });
+    for (const day of [3, 4, 5, 6]) lock(x.d, x.p.id, day, { kind: 'shift', shift: x.E.id });
+    if (!C.unavoidableErrors(x.d).some((it) => it.rule === 'sixPlus')) problems.push('夜勤→（明けになる日）→出勤4日 の6連勤以上を、避けられないエラーとして知らせない');
+    lock(x.d, x.p.id, 2, { kind: 'off' });
+    if (C.unavoidableErrors(x.d).length) problems.push('夜勤の次の日を休みに固定したのに、避けられないエラーを知らせる');
+  }
+  check('解く前のぶつかり（固定したマスも入れる）と、避けられないエラー', problems);
+}
+
+// 13b. 自動で作った表を入れる（applyGenerated）：固定は残す・手で変えた印は消す・記録は 20 回まで
+{
+  const problems = [];
+  const d = S.buildSample('restaurant', 2026, 11);
+  const p = d.staff[0];
+  d.month.marks[p.id] = { 2: { locked: true, edited: true }, 3: { edited: true } };
+  d.month.runs = Array.from({ length: M.MAX_RUNS }, (_, i) => ({ at: `run-${i}` }));
+  M.applyGenerated(d, { [p.id]: { 1: { kind: 'off' } } }, { at: 'new' });
+  if (d.month.table[p.id]?.[1]?.kind !== 'off') problems.push('作った表が入らない');
+  if (!d.month.marks[p.id]?.[2]?.locked || d.month.marks[p.id]?.[2]?.edited) problems.push('固定の印が消えた、または手で変えた印が残った');
+  if (d.month.marks[p.id]?.[3]) problems.push('手で変えた印だけのマスの印が残った');
+  if (d.month.runs.length !== M.MAX_RUNS || d.month.runs[0].at !== 'run-1' || d.month.runs[M.MAX_RUNS - 1].at !== 'new') problems.push(`記録が新しい ${M.MAX_RUNS} 回ぶんになっていない`);
+  if (M.validateData(JSON.parse(JSON.stringify(d))).length) problems.push('作った表を入れたデータが、データの形の確かめに通らない');
+  check('自動で作った表を入れる（固定は残す・記録は 20 回まで）', problems);
 }
 
 // 14. 自動で作る（小さな月）：同じ種・同じ上限なら同じ表／固定したマスは変わらない／担当外を入れない

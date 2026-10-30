@@ -60,10 +60,6 @@
   "find": "welcome-backup-restore"
  },
  {
-  "id": "pending-message",
-  "find": "pending-message"
- },
- {
   "id": "data-panel",
   "find": "data-panel"
  },
@@ -718,5 +714,101 @@
  {
   "id": "shift-need-off",
   "find": "shift-need-off"
+ },
+ {
+  "id": "mode-quick",
+  "find": "mode-quick"
+ },
+ {
+  "id": "mode-careful",
+  "find": "mode-careful"
+ },
+ {
+  "id": "precheck-ok",
+  "find": "precheck-ok"
+ },
+ {
+  "id": "solve-blockers",
+  "find": "solve-blockers"
+ },
+ {
+  "id": "solve-unavoidable",
+  "find": "solve-unavoidable"
+ },
+ {
+  "id": "generate",
+  "find": "generate"
+ },
+ {
+  "id": "generate-why",
+  "find": "generate-why"
+ },
+ {
+  "id": "generate-confirm",
+  "find": "generate-confirm"
+ },
+ {
+  "id": "generate-ok",
+  "find": "generate-ok"
+ },
+ {
+  "id": "generate-cancel",
+  "find": "generate-cancel"
+ },
+ {
+  "id": "run-dialog",
+  "find": "run-dialog"
+ },
+ {
+  "id": "run-stage",
+  "find": "run-stage"
+ },
+ {
+  "id": "run-progress",
+  "find": "run-progress"
+ },
+ {
+  "id": "run-time",
+  "find": "run-time"
+ },
+ {
+  "id": "run-best",
+  "find": "run-best"
+ },
+ {
+  "id": "run-stop",
+  "find": "run-stop"
+ },
+ {
+  "id": "run-result",
+  "find": "run-result"
+ },
+ {
+  "id": "run-status",
+  "find": "run-status"
+ },
+ {
+  "id": "run-go-table",
+  "find": "run-go-table"
+ },
+ {
+  "id": "run-again",
+  "find": "run-again"
+ },
+ {
+  "id": "run-done",
+  "find": "run-done"
+ },
+ {
+  "id": "run-stopped",
+  "find": "run-stopped"
+ },
+ {
+  "id": "run-changed",
+  "find": "run-changed"
+ },
+ {
+  "id": "run-failed",
+  "find": "run-failed"
  }
 ]

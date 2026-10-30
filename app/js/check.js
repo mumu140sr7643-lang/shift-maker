@@ -1,8 +1,8 @@
 // 決まりの検査と、良し悪しの比べ方（docs/数え方の表.md の 2 章・3 章）。
 // 画面には触らない。ブラウザでも node（tools/count.mjs）でも同じものを使う。
-import { RULES, strengthOf, cellTraits, isRestKind } from './rules.js?v=3.1';
-import { monthDays, shiftById, rankOrder, needOn, cellOf, cellName } from './model.js?v=3.1';
-import { weekdayOf } from './calendar.js?v=3.1';
+import { RULES, strengthOf, cellTraits, isRestKind } from './rules.js?v=3.2';
+import { monthDays, shiftById, rankOrder, needOn, cellOf, cellName } from './model.js?v=3.2';
+import { weekdayOf } from './calendar.js?v=3.2';
 
 const GROUP_IDS = ['early', 'late', 'night'];
 
@@ -329,9 +329,9 @@ export function requestConflicts(data) {
   return conflictsOf(data, fixed);
 }
 
-// 自動で作る前の確かめ：希望に、手で固定したマスも入れる。
-// 固定と希望が違うマス、夜勤の次の日が空きのまま固定されたマスも出す。
-export function solveConflicts(data) {
+// 自動で作るときに、値が決まっているマス（希望と、手で固定したマス）を集める。
+// 返す：{ fixed（空きのまま固定したマスは入れない）, emptyLocks: [[人, 日]], extra（固定と希望が違うマス・夜勤の次の日が空きのまま固定） }
+function fixedCells(data) {
   const fixed = {};
   const emptyLocks = [];
   const extra = [];
@@ -362,7 +362,33 @@ export function solveConflicts(data) {
     const prevNight = day === 1 ? Boolean(p?.prevLastShift && shiftById(data, p.prevLastShift)?.night) : prev?.kind === 'shift' && Boolean(shiftById(data, prev.shift)?.night);
     if (prevNight) extra.push({ rule: 'nightNext', strength: 'hard', staff: pid, day, text: `${p?.name || '名前なし'}さんの${md(day)}は、夜勤の次の日ですが、空きのまま固定されています` });
   }
-  return [...extra, ...conflictsOf(data, fixed)];
+  return { fixed, emptyLocks, extra };
+}
+
+// 自動で作る前に止めるもの：式で縛っているので、あると答えが無くなる（または必ず残る）もの。
+// 6連勤以上・連勤超過・遅い→早い・2連休は、式では量を最小にするだけなので止めない（unavoidableErrors で知らせる）
+const BLOCKING = new Set(['notAssigned', 'dailySkill', 'nightNext', 'requestDiff']);
+export function solveConflicts(data) {
+  const { fixed, extra } = fixedCells(data);
+  return [...extra, ...conflictsOf(data, fixed).filter((it) => BLOCKING.has(it.rule))];
+}
+
+// 希望・固定のとおりにすると、どう作っても残る 6連勤以上・連勤超過・遅い→早い・2連休。
+// 決まっていない日のうち、夜勤の次の日は明けになる（式で縛っている）ので、明けとして入れて数える
+const UNAVOIDABLE = new Set(['sixPlus', 'overStreak', 'lateToEarly', 'twoOffLateEarly']);
+export function unavoidableErrors(data) {
+  const { fixed, emptyLocks } = fixedCells(data);
+  const empty = new Set(emptyLocks.map(([pid, day]) => `${pid}|${day}`));
+  const isNight = (v) => v?.kind === 'shift' && Boolean(shiftById(data, v.shift)?.night);
+  const N = monthDays(data);
+  for (const p of data.staff) {
+    for (let d = 1; d <= N; d += 1) {
+      if (fixed[p.id]?.[d] || empty.has(`${p.id}|${d}`)) continue;
+      const prevNight = d === 1 ? Boolean(p.prevLastShift && shiftById(data, p.prevLastShift)?.night) : isNight(fixed[p.id]?.[d - 1]);
+      if (prevNight) (fixed[p.id] ??= {})[d] = { kind: 'ake' };
+    }
+  }
+  return conflictsOf(data, fixed).filter((it) => UNAVOIDABLE.has(it.rule));
 }
 
 // ---------- 良し悪しの比べ方（数え方の表の 3 章） ----------

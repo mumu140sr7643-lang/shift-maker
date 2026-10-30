@@ -1,13 +1,16 @@
 // 「答えが無い」にならないことの確かめ（docs/自動で作る案.md の 6 章 E）。作り物のデータだけ。
 // 使い方: node tools/solve-stress.mjs [--months 100] [--from 1] [--nodes 20]
 // 作り物の月に、希望と固定を乱数でたくさん入れ（休み・有給・半休・シフト・空きの固定・明けの固定・夜勤の次の日の休み・
-// 前の月の最後の夜勤・日ごとに要るスキル）、はじめの段（6連勤以上）だけを解く。
+// 前の月の最後の夜勤・日ごとに要るスキル）、段1〜4（6連勤以上・人員不足・公休・連勤超過）を解く。
+//   解く前に止めたとき → 止めた理由が、式で縛る決まり（担当外・日ごとに要るスキル・夜勤の次の日・希望と違う）だけであること
 //   答えが無いとき → そのときは必ず solveConflicts が1件以上あること
-//   答えが出たとき → 担当外のシフト・希望と違う・日ごとに要るスキル・夜勤の次の日が 0件で、固定したマスが変わっていないこと
+//   答えが出たとき → 担当外のシフト・希望と違う・日ごとに要るスキル・夜勤の次の日が 0件で、固定したマスが変わっていないこと。
+//     6連勤以上の件数が、希望・固定と前の月だけで避けられない数（unavoidableErrors）と同じであること。
+//     連勤超過は、避けられない数より少なくないこと（多いときは数える。人員不足を先に減らすため、増えることがある）
 import { pathToFileURL } from 'node:url';
 import { makeSample, rng } from './make-sample.mjs';
 import { solveStaged } from '../app/js/solver/stages.js';
-import { checkTable, solveConflicts } from '../app/js/check.js';
+import { checkTable, solveConflicts, unavoidableErrors } from '../app/js/check.js';
 import { clone, monthDays } from '../app/js/model.js';
 import highsLoader from '../vendor/highs/highs.mjs';
 
@@ -61,8 +64,10 @@ export async function stressMonth(seed, nodes = 20) {
   const d = await stressData(seed);
   const N = monthDays(d);
   const conflicts = solveConflicts(d);
-  const res = await solveStaged(d, { loadHighs: () => highsLoader(), nodeLimit: nodes, seed: 1, maxStages: 1 });
-  const out = { seed, staff: d.staff.length, days: N, conflicts: conflicts.length, conflictRules: conflicts.map((c) => c.rule), ok: res.ok, reason: res.reason ?? null, retried: res.stages.some((x) => x.retried), problems: [] };
+  const unavoidable = unavoidableErrors(d);
+  const res = await solveStaged(d, { loadHighs: () => highsLoader(), nodeLimit: nodes, seed: 1, maxStages: 4 });
+  const out = { seed, staff: d.staff.length, days: N, conflicts: conflicts.length, conflictRules: conflicts.map((c) => c.rule), unavoidableRules: unavoidable.map((c) => c.rule), ok: res.ok, reason: res.reason ?? null, retried: res.stages.some((x) => x.retried), overStreakMore: 0, problems: [] };
+  for (const c of conflicts) if (!['notAssigned', 'dailySkill', 'nightNext', 'requestDiff'].includes(c.rule)) out.problems.push(`止めた理由が式で縛る決まりではない（${c.rule}）`);
   if (!res.ok) {
     if ((res.reason === 'infeasible' || res.reason === 'no-answer') && conflicts.length === 0) out.problems.push(`答えが無い（${res.reason}）のに、ぶつかりの知らせが0件`);
     return out;
@@ -72,6 +77,12 @@ export async function stressMonth(seed, nodes = 20) {
   const c = checkTable(after);
   for (const rule of ['notAssigned', 'requestDiff', 'dailySkill', 'nightNext']) {
     if (c.byRule[rule].count) out.problems.push(`${rule} が ${c.byRule[rule].count}件`);
+  }
+  const want = (rule) => unavoidable.filter((it) => it.rule === rule).length;
+  if (c.byRule.sixPlus.count !== want('sixPlus')) out.problems.push(`6連勤以上が ${c.byRule.sixPlus.count}件（避けられない数は ${want('sixPlus')}件）`);
+  if (c.byRule.overStreak.strength !== 'off') {
+    if (c.byRule.overStreak.count < want('overStreak')) out.problems.push(`連勤超過が ${c.byRule.overStreak.count}件で、避けられない数 ${want('overStreak')}件より少ない（数え方がずれている）`);
+    out.overStreakMore = c.byRule.overStreak.count - want('overStreak');
   }
   for (const [pid, days] of Object.entries(d.month.marks)) {
     for (const [day, m] of Object.entries(days)) {
@@ -88,11 +99,14 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const months = arg('months', 100);
   const from = arg('from', 1);
   const nodes = arg('nodes', 20);
-  const tally = { months: 0, solved: 0, stoppedByConflict: 0, noAnswerWithConflict: 0, presolveRetried: 0, problems: 0, conflictRules: {} };
+  const tally = { months: 0, solved: 0, stoppedByConflict: 0, noAnswerWithConflict: 0, presolveRetried: 0, problems: 0, conflictRules: {}, unavoidableRules: {}, solvedWithUnavoidable: 0, overStreakMoreMonths: 0 };
   for (let seed = from; seed < from + months; seed += 1) {
     const o = await stressMonth(seed, nodes);
     tally.months += 1;
     for (const rule of o.conflictRules) tally.conflictRules[rule] = (tally.conflictRules[rule] ?? 0) + 1;
+    for (const rule of o.unavoidableRules) tally.unavoidableRules[rule] = (tally.unavoidableRules[rule] ?? 0) + 1;
+    if (o.ok && o.unavoidableRules.length) tally.solvedWithUnavoidable += 1;
+    if (o.overStreakMore > 0) tally.overStreakMoreMonths += 1;
     if (o.retried) tally.presolveRetried += 1;
     if (o.ok) tally.solved += 1;
     else if (o.reason === 'conflict') tally.stoppedByConflict += 1;

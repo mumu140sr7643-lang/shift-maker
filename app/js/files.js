@@ -1,5 +1,5 @@
 // ファイルに書き出す。
-import { canonicalJSON } from './model.js?v=3.1';
+import { canonicalJSON } from './model.js?v=3.2';
 
 function stamp(date) {
   const p = (n) => String(n).padStart(2, '0');

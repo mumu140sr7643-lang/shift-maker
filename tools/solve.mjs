@@ -42,14 +42,24 @@ export function compareAmounts(solved, counted, data) {
     switchCount: { solver: solved.amounts.switchCount ?? 0, check: by.switchCount.amount },
     leaderRank: { solver: null, check: by.leaderRank.count },
   };
+  // 解ききっていない段（時間・調べる数の上限）の決まりは、違反の量を表す数が実際より大きいままのことがあるので、
+  // 「式の量 ≧ 検査の量」なら よし とする（loose: true）。解ききった段の決まりは、ぴったり同じでなければいけない
+  const stageOf = (rule) => solved.stages.find((st) => st.rules?.includes(rule));
   for (const [k, v] of Object.entries(exact)) {
-    if (by[k] && by[k].strength === 'off') delete exact[k];
-    else v.same = Math.abs(v.solver - v.check) < 1e-6;
+    if (by[k] && by[k].strength === 'off') {
+      delete exact[k];
+      continue;
+    }
+    const st = stageOf(k);
+    if (st && st.status !== 'solved') {
+      v.loose = true;
+      v.same = v.solver >= v.check - 1e-6;
+    } else v.same = Math.abs(v.solver - v.check) < 1e-6;
   }
   return { exact, approx };
 }
 
-export async function solveFile(data, { nodes = null, seed = 1, time = null, leaderWeight = 0, presolve = 'on' } = {}) {
+export async function solveFile(data, { nodes = null, seed = 1, time = null, leaderWeight = 0, presolve = 'on', warmStart } = {}) {
   const solved = await solveStaged(data, {
     loadHighs: () => highsLoader(),
     nodeLimit: nodes,
@@ -57,6 +67,7 @@ export async function solveFile(data, { nodes = null, seed = 1, time = null, lea
     seed,
     leaderWeight,
     presolve,
+    ...(warmStart === undefined ? {} : { warmStart }),
   });
   if (!solved.ok) return { solved };
   const out = clone(data);

@@ -1,6 +1,6 @@
 // データの形と、データを作る・確かめる・直す関数。
 // 画面（DOM）には触らない。ブラウザでも node（確かめの道具）でも同じものを使う。
-import { daysInMonth, weekdayOf } from './calendar.js?v=3.1';
+import { daysInMonth, weekdayOf } from './calendar.js?v=3.2';
 
 // データの形の版。形を変えたら 1 つ上げ、migrate() に古い形を直す手順を足す。
 export const FORMAT_VERSION = 1;
@@ -341,6 +341,18 @@ export function setLock(data, pid, day, on) {
 
 export function isNightShift(data, value) {
   return value?.kind === 'shift' && Boolean(shiftById(data, value.shift)?.night);
+}
+
+// 自動で作った表を入れる。固定したマスの印は残し、「手で変えた」の印は消す（新しい表なので）。
+// 作った記録（run）を month.runs に足し、新しい MAX_RUNS 回ぶんまで残す
+export const MAX_RUNS = 20;
+export function applyGenerated(data, table, run) {
+  data.month.table = table;
+  for (const [pid, days] of Object.entries(data.month.marks)) {
+    for (const day of Object.keys(days)) setMark(data, pid, Number(day), 'edited', false);
+  }
+  data.month.runs.push(run);
+  if (data.month.runs.length > MAX_RUNS) data.month.runs.splice(0, data.month.runs.length - MAX_RUNS);
 }
 
 // 表のマスを手で変える。

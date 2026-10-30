@@ -1,6 +1,6 @@
 // ブラウザの中への保存。保存の名前は、すべて頭に「shift-maker:」を付ける
 // （同じアカウントの GitHub Pages は、ほかのアプリと保存場所が同じため）。
-import { migrate, validateData } from './model.js?v=3.1';
+import { migrate, validateData } from './model.js?v=3.2';
 
 export const PREFIX = 'shift-maker:';
 export const KEYS = {
@@ -21,6 +21,7 @@ export const BACKUP_REASONS = {
   import: '取り込む前',
   restore: '控えから戻す前',
   prev: 'ひとつ前の保存に戻す前',
+  generate: '自動で作る前',
 };
 
 function get(key) {
