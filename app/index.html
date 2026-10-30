@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>シフト表メーカー</title>
+  <link rel="stylesheet" href="css/app.css?v=1.1">
+  <script type="module" src="js/main.js?v=1.1"></script>
+</head>
+<body>
+  <a class="skip" href="#screen">本文へ移る</a>
+  <header class="topbar">
+    <div class="brand">シフト表メーカー</div>
+    <div class="month" id="month-label" data-testid="month-label"></div>
+    <div class="save" id="save-status" data-testid="save-status" role="status" aria-live="polite"></div>
+    <div class="top-actions">
+      <button type="button" id="menu-toggle" class="btn btn-small menu-toggle" aria-expanded="false" aria-controls="steps" data-testid="menu-toggle" hidden>手順</button>
+      <button type="button" id="data-button" class="btn btn-small" data-testid="data-button" hidden>保存と控え</button>
+      <label class="theme">
+        <span>表示</span>
+        <select id="theme" data-testid="theme-select">
+          <option value="auto">自動</option>
+          <option value="light">明るい</option>
+          <option value="dark">暗い</option>
+        </select>
+      </label>
+    </div>
+  </header>
+  <div class="layout">
+    <nav id="steps" class="steps" aria-label="作り方の手順" data-testid="steps" hidden></nav>
+    <main id="main">
+      <div id="notices" class="notices" data-testid="notices"></div>
+      <div id="screen" data-testid="screen" tabindex="-1"></div>
+    </main>
+  </div>
+  <footer class="foot"><span id="app-version" data-testid="app-version"></span></footer>
+  <noscript><p class="noscript">このアプリは JavaScript を使います。ブラウザの設定で JavaScript を有効にしてください。</p></noscript>
+</body>
+</html>

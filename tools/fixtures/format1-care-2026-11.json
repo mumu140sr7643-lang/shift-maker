@@ -1,0 +1,583 @@
+{
+  "formatVersion": 1,
+  "month": {
+    "dailySkill": {},
+    "marks": {},
+    "month": 11,
+    "needOverride": {},
+    "requests": {},
+    "runs": [],
+    "special": [],
+    "table": {},
+    "year": 2026
+  },
+  "nextIds": {
+    "rank": 4,
+    "rule": 1,
+    "shift": 5,
+    "skill": 2,
+    "special": 1,
+    "staff": 19
+  },
+  "sample": "care",
+  "settings": {
+    "employmentNames": {
+      "full": "社員",
+      "part": "パート・アルバイト"
+    },
+    "groupNames": {
+      "early": "早い時間帯",
+      "late": "遅い時間帯",
+      "night": "夜"
+    },
+    "needRules": [],
+    "ranks": [
+      {
+        "id": "r1",
+        "name": "管理者"
+      },
+      {
+        "id": "r2",
+        "name": "リーダー"
+      },
+      {
+        "id": "r3",
+        "name": "スタッフ"
+      }
+    ],
+    "shifts": [
+      {
+        "color": "#FFF2CC",
+        "combine": true,
+        "counts": true,
+        "group": "early",
+        "hours": 8,
+        "id": "s1",
+        "name": "早出",
+        "need": {
+          "all": 2,
+          "full": 0,
+          "part": 0
+        },
+        "night": false,
+        "onePerDay": false,
+        "symbol": "早",
+        "training": false
+      },
+      {
+        "color": "#E2EFDA",
+        "combine": true,
+        "counts": true,
+        "group": "early",
+        "hours": 8,
+        "id": "s2",
+        "name": "日勤",
+        "need": {
+          "all": 3,
+          "full": 0,
+          "part": 0
+        },
+        "night": false,
+        "onePerDay": false,
+        "symbol": "日",
+        "training": false
+      },
+      {
+        "color": "#DDEBF7",
+        "combine": true,
+        "counts": true,
+        "group": "late",
+        "hours": 8,
+        "id": "s3",
+        "name": "遅出",
+        "need": {
+          "all": 2,
+          "full": 0,
+          "part": 0
+        },
+        "night": false,
+        "onePerDay": false,
+        "symbol": "遅",
+        "training": false
+      },
+      {
+        "color": "#D9D2E9",
+        "combine": true,
+        "counts": true,
+        "group": "night",
+        "hours": 16,
+        "id": "s4",
+        "name": "夜勤",
+        "need": {
+          "all": 2,
+          "full": 0,
+          "part": 0
+        },
+        "night": true,
+        "onePerDay": false,
+        "symbol": "夜",
+        "training": false
+      }
+    ],
+    "skills": [
+      {
+        "id": "k1",
+        "min": {
+          "early": 1,
+          "late": 1,
+          "night": 1
+        },
+        "name": "看護",
+        "target": {
+          "early": 1,
+          "late": 1,
+          "night": 1
+        }
+      }
+    ],
+    "strengths": {},
+    "work": {
+      "avoidSingleOff": true,
+      "biasAllowance": 3,
+      "forbidLateToEarly": true,
+      "halfDayHours": 4,
+      "maxConsecutive": 5,
+      "maxSwitches": 2,
+      "restRun": 2
+    }
+  },
+  "staff": [
+    {
+      "biasPref": "even",
+      "employment": "full",
+      "groupPref": "any",
+      "id": "p1",
+      "maxConsecutive": null,
+      "memo": "",
+      "name": "A",
+      "offDays": 9,
+      "paidDays": 0,
+      "prevConsecutive": 0,
+      "prevLastShift": null,
+      "rank": "r1",
+      "restStyle": "any",
+      "shifts": [
+        "s2"
+      ],
+      "skills": [
+        "k1"
+      ],
+      "twoOffAfterLateEarly": false,
+      "weekendPref": "any"
+    },
+    {
+      "biasPref": "even",
+      "employment": "full",
+      "groupPref": "any",
+      "id": "p2",
+      "maxConsecutive": null,
+      "memo": "",
+      "name": "B",
+      "offDays": 9,
+      "paidDays": 0,
+      "prevConsecutive": 0,
+      "prevLastShift": null,
+      "rank": "r2",
+      "restStyle": "any",
+      "shifts": [
+        "s1",
+        "s2",
+        "s3",
+        "s4"
+      ],
+      "skills": [
+        "k1"
+      ],
+      "twoOffAfterLateEarly": false,
+      "weekendPref": "any"
+    },
+    {
+      "biasPref": "even",
+      "employment": "full",
+      "groupPref": "any",
+      "id": "p3",
+      "maxConsecutive": null,
+      "memo": "",
+      "name": "C",
+      "offDays": 9,
+      "paidDays": 0,
+      "prevConsecutive": 0,
+      "prevLastShift": null,
+      "rank": "r2",
+      "restStyle": "any",
+      "shifts": [
+        "s1",
+        "s2",
+        "s3",
+        "s4"
+      ],
+      "skills": [],
+      "twoOffAfterLateEarly": false,
+      "weekendPref": "any"
+    },
+    {
+      "biasPref": "even",
+      "employment": "full",
+      "groupPref": "any",
+      "id": "p4",
+      "maxConsecutive": null,
+      "memo": "",
+      "name": "D",
+      "offDays": 9,
+      "paidDays": 0,
+      "prevConsecutive": 0,
+      "prevLastShift": null,
+      "rank": "r3",
+      "restStyle": "any",
+      "shifts": [
+        "s1",
+        "s2",
+        "s3",
+        "s4"
+      ],
+      "skills": [
+        "k1"
+      ],
+      "twoOffAfterLateEarly": false,
+      "weekendPref": "any"
+    },
+    {
+      "biasPref": "even",
+      "employment": "full",
+      "groupPref": "any",
+      "id": "p5",
+      "maxConsecutive": null,
+      "memo": "",
+      "name": "E",
+      "offDays": 9,
+      "paidDays": 0,
+      "prevConsecutive": 0,
+      "prevLastShift": null,
+      "rank": "r3",
+      "restStyle": "any",
+      "shifts": [
+        "s1",
+        "s2",
+        "s3",
+        "s4"
+      ],
+      "skills": [],
+      "twoOffAfterLateEarly": false,
+      "weekendPref": "any"
+    },
+    {
+      "biasPref": "even",
+      "employment": "full",
+      "groupPref": "any",
+      "id": "p6",
+      "maxConsecutive": null,
+      "memo": "",
+      "name": "F",
+      "offDays": 9,
+      "paidDays": 0,
+      "prevConsecutive": 1,
+      "prevLastShift": "s4",
+      "rank": "r3",
+      "restStyle": "any",
+      "shifts": [
+        "s1",
+        "s2",
+        "s3",
+        "s4"
+      ],
+      "skills": [
+        "k1"
+      ],
+      "twoOffAfterLateEarly": false,
+      "weekendPref": "any"
+    },
+    {
+      "biasPref": "even",
+      "employment": "full",
+      "groupPref": "any",
+      "id": "p7",
+      "maxConsecutive": null,
+      "memo": "",
+      "name": "G",
+      "offDays": 9,
+      "paidDays": 0,
+      "prevConsecutive": 0,
+      "prevLastShift": null,
+      "rank": "r3",
+      "restStyle": "any",
+      "shifts": [
+        "s1",
+        "s2",
+        "s3",
+        "s4"
+      ],
+      "skills": [],
+      "twoOffAfterLateEarly": false,
+      "weekendPref": "any"
+    },
+    {
+      "biasPref": "even",
+      "employment": "full",
+      "groupPref": "any",
+      "id": "p8",
+      "maxConsecutive": null,
+      "memo": "",
+      "name": "H",
+      "offDays": 9,
+      "paidDays": 0,
+      "prevConsecutive": 0,
+      "prevLastShift": null,
+      "rank": "r3",
+      "restStyle": "any",
+      "shifts": [
+        "s1",
+        "s2",
+        "s3",
+        "s4"
+      ],
+      "skills": [
+        "k1"
+      ],
+      "twoOffAfterLateEarly": false,
+      "weekendPref": "any"
+    },
+    {
+      "biasPref": "early",
+      "employment": "full",
+      "groupPref": "any",
+      "id": "p9",
+      "maxConsecutive": null,
+      "memo": "",
+      "name": "I",
+      "offDays": 9,
+      "paidDays": 0,
+      "prevConsecutive": 0,
+      "prevLastShift": null,
+      "rank": "r3",
+      "restStyle": "any",
+      "shifts": [
+        "s1",
+        "s2",
+        "s3",
+        "s4"
+      ],
+      "skills": [],
+      "twoOffAfterLateEarly": false,
+      "weekendPref": "any"
+    },
+    {
+      "biasPref": "even",
+      "employment": "full",
+      "groupPref": "any",
+      "id": "p10",
+      "maxConsecutive": null,
+      "memo": "",
+      "name": "J",
+      "offDays": 9,
+      "paidDays": 0,
+      "prevConsecutive": 0,
+      "prevLastShift": null,
+      "rank": "r3",
+      "restStyle": "any",
+      "shifts": [
+        "s1",
+        "s2",
+        "s3",
+        "s4"
+      ],
+      "skills": [
+        "k1"
+      ],
+      "twoOffAfterLateEarly": false,
+      "weekendPref": "any"
+    },
+    {
+      "biasPref": "even",
+      "employment": "full",
+      "groupPref": "any",
+      "id": "p11",
+      "maxConsecutive": null,
+      "memo": "",
+      "name": "K",
+      "offDays": 9,
+      "paidDays": 0,
+      "prevConsecutive": 0,
+      "prevLastShift": null,
+      "rank": "r3",
+      "restStyle": "together",
+      "shifts": [
+        "s1",
+        "s2",
+        "s3",
+        "s4"
+      ],
+      "skills": [],
+      "twoOffAfterLateEarly": false,
+      "weekendPref": "any"
+    },
+    {
+      "biasPref": "even",
+      "employment": "part",
+      "groupPref": "any",
+      "id": "p12",
+      "maxConsecutive": null,
+      "memo": "",
+      "name": "L",
+      "offDays": 12,
+      "paidDays": 0,
+      "prevConsecutive": 0,
+      "prevLastShift": null,
+      "rank": "r3",
+      "restStyle": "any",
+      "shifts": [
+        "s1",
+        "s2",
+        "s3"
+      ],
+      "skills": [
+        "k1"
+      ],
+      "twoOffAfterLateEarly": false,
+      "weekendPref": "any"
+    },
+    {
+      "biasPref": "even",
+      "employment": "part",
+      "groupPref": "early",
+      "id": "p13",
+      "maxConsecutive": null,
+      "memo": "",
+      "name": "M",
+      "offDays": 12,
+      "paidDays": 0,
+      "prevConsecutive": 0,
+      "prevLastShift": null,
+      "rank": "r3",
+      "restStyle": "any",
+      "shifts": [
+        "s1",
+        "s2"
+      ],
+      "skills": [],
+      "twoOffAfterLateEarly": false,
+      "weekendPref": "any"
+    },
+    {
+      "biasPref": "even",
+      "employment": "part",
+      "groupPref": "any",
+      "id": "p14",
+      "maxConsecutive": null,
+      "memo": "",
+      "name": "N",
+      "offDays": 12,
+      "paidDays": 0,
+      "prevConsecutive": 0,
+      "prevLastShift": null,
+      "rank": "r3",
+      "restStyle": "any",
+      "shifts": [
+        "s2",
+        "s3"
+      ],
+      "skills": [],
+      "twoOffAfterLateEarly": false,
+      "weekendPref": "any"
+    },
+    {
+      "biasPref": "even",
+      "employment": "part",
+      "groupPref": "any",
+      "id": "p15",
+      "maxConsecutive": null,
+      "memo": "",
+      "name": "O",
+      "offDays": 13,
+      "paidDays": 0,
+      "prevConsecutive": 0,
+      "prevLastShift": null,
+      "rank": "r3",
+      "restStyle": "any",
+      "shifts": [
+        "s1",
+        "s2",
+        "s3"
+      ],
+      "skills": [],
+      "twoOffAfterLateEarly": false,
+      "weekendPref": "off"
+    },
+    {
+      "biasPref": "even",
+      "employment": "part",
+      "groupPref": "any",
+      "id": "p16",
+      "maxConsecutive": null,
+      "memo": "",
+      "name": "P",
+      "offDays": 14,
+      "paidDays": 0,
+      "prevConsecutive": 0,
+      "prevLastShift": null,
+      "rank": "r3",
+      "restStyle": "any",
+      "shifts": [
+        "s2"
+      ],
+      "skills": [
+        "k1"
+      ],
+      "twoOffAfterLateEarly": false,
+      "weekendPref": "any"
+    },
+    {
+      "biasPref": "even",
+      "employment": "part",
+      "groupPref": "late",
+      "id": "p17",
+      "maxConsecutive": null,
+      "memo": "",
+      "name": "Q",
+      "offDays": 12,
+      "paidDays": 0,
+      "prevConsecutive": 0,
+      "prevLastShift": null,
+      "rank": "r3",
+      "restStyle": "any",
+      "shifts": [
+        "s3"
+      ],
+      "skills": [],
+      "twoOffAfterLateEarly": false,
+      "weekendPref": "any"
+    },
+    {
+      "biasPref": "even",
+      "employment": "part",
+      "groupPref": "any",
+      "id": "p18",
+      "maxConsecutive": null,
+      "memo": "",
+      "name": "R",
+      "offDays": 12,
+      "paidDays": 1,
+      "prevConsecutive": 0,
+      "prevLastShift": null,
+      "rank": "r3",
+      "restStyle": "any",
+      "shifts": [
+        "s1",
+        "s2",
+        "s3"
+      ],
+      "skills": [],
+      "twoOffAfterLateEarly": false,
+      "weekendPref": "any"
+    }
+  ]
+}

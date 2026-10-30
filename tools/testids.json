@@ -1,0 +1,538 @@
+[
+ {
+  "id": "month-label",
+  "find": "month-label"
+ },
+ {
+  "id": "save-status",
+  "find": "save-status"
+ },
+ {
+  "id": "data-button",
+  "find": "data-button"
+ },
+ {
+  "id": "theme-select",
+  "find": "theme-select"
+ },
+ {
+  "id": "app-version",
+  "find": "app-version"
+ },
+ {
+  "id": "menu-toggle",
+  "find": "menu-toggle"
+ },
+ {
+  "id": "steps",
+  "find": "steps"
+ },
+ {
+  "id": "notices",
+  "find": "notices"
+ },
+ {
+  "id": "screen",
+  "find": "screen"
+ },
+ {
+  "id": "screen-title",
+  "find": "screen-title"
+ },
+ {
+  "id": "prev-step",
+  "find": "prev-step"
+ },
+ {
+  "id": "next-step",
+  "find": "next-step"
+ },
+ {
+  "id": "welcome",
+  "find": "welcome"
+ },
+ {
+  "id": "welcome-backup",
+  "find": "welcome-backup"
+ },
+ {
+  "id": "welcome-backup-restore",
+  "find": "welcome-backup-restore"
+ },
+ {
+  "id": "pending-message",
+  "find": "pending-message"
+ },
+ {
+  "id": "data-panel",
+  "find": "data-panel"
+ },
+ {
+  "id": "data-panel-close",
+  "find": "data-panel-close"
+ },
+ {
+  "id": "restore-prev",
+  "find": "restore-prev"
+ },
+ {
+  "id": "restore-prev-ok",
+  "find": "restore-prev-ok"
+ },
+ {
+  "id": "restore-prev-cancel",
+  "find": "restore-prev-cancel"
+ },
+ {
+  "id": "restore-backup",
+  "find": "restore-backup"
+ },
+ {
+  "id": "restore-backup-ok",
+  "find": "restore-backup-ok"
+ },
+ {
+  "id": "restore-backup-cancel",
+  "find": "restore-backup-cancel"
+ },
+ {
+  "id": "export-file",
+  "find": "export-file"
+ },
+ {
+  "id": "reset",
+  "find": "reset"
+ },
+ {
+  "id": "reset-dialog",
+  "find": "reset-dialog"
+ },
+ {
+  "id": "reset-ok",
+  "find": "reset-ok"
+ },
+ {
+  "id": "reset-cancel",
+  "find": "reset-cancel"
+ },
+ {
+  "id": "reset-export",
+  "find": "reset-export"
+ },
+ {
+  "id": "reset-notice",
+  "find": "reset-notice"
+ },
+ {
+  "id": "reset-undo",
+  "find": "reset-undo"
+ },
+ {
+  "id": "restored-notice",
+  "find": "restored-notice"
+ },
+ {
+  "id": "export-notice",
+  "find": "export-notice"
+ },
+ {
+  "id": "broken-notice",
+  "find": "broken-notice"
+ },
+ {
+  "id": "broken-export",
+  "find": "broken-export"
+ },
+ {
+  "id": "warn-notice",
+  "find": "warn-notice"
+ },
+ {
+  "id": "error-notice",
+  "find": "error-notice"
+ },
+ {
+  "id": "other-tab-notice",
+  "find": "other-tab-notice"
+ },
+ {
+  "id": "target-month",
+  "find": "target-month"
+ },
+ {
+  "id": "target-month-apply",
+  "find": "target-month-apply"
+ },
+ {
+  "id": "month-dialog",
+  "find": "month-dialog"
+ },
+ {
+  "id": "month-cancel",
+  "find": "month-cancel"
+ },
+ {
+  "id": "month-export-clear",
+  "find": "month-export-clear"
+ },
+ {
+  "id": "month-clear",
+  "find": "month-clear"
+ },
+ {
+  "id": "month-notice",
+  "find": "month-notice"
+ },
+ {
+  "id": "work-max-consecutive",
+  "find": "work-max-consecutive"
+ },
+ {
+  "id": "work-rest-run",
+  "find": "work-rest-run"
+ },
+ {
+  "id": "work-max-switches",
+  "find": "work-max-switches"
+ },
+ {
+  "id": "work-bias",
+  "find": "work-bias"
+ },
+ {
+  "id": "work-half-hours",
+  "find": "work-half-hours"
+ },
+ {
+  "id": "work-forbid-late-early",
+  "find": "work-forbid-late-early"
+ },
+ {
+  "id": "work-avoid-single-off",
+  "find": "work-avoid-single-off"
+ },
+ {
+  "id": "rank-list",
+  "find": "rank-list"
+ },
+ {
+  "id": "rank-name",
+  "find": "rank-name"
+ },
+ {
+  "id": "rank-add",
+  "find": "rank-add"
+ },
+ {
+  "id": "rank-delete",
+  "find": "rank-delete"
+ },
+ {
+  "id": "rank-delete-ok",
+  "find": "rank-delete-ok"
+ },
+ {
+  "id": "skill-list",
+  "find": "skill-list"
+ },
+ {
+  "id": "skill-name",
+  "find": "skill-name"
+ },
+ {
+  "id": "skill-add",
+  "find": "skill-add"
+ },
+ {
+  "id": "skill-delete",
+  "find": "skill-delete"
+ },
+ {
+  "id": "skill-delete-ok",
+  "find": "skill-delete-ok"
+ },
+ {
+  "id": "special-list",
+  "find": "special-list"
+ },
+ {
+  "id": "special-day",
+  "find": "special-day"
+ },
+ {
+  "id": "special-name",
+  "find": "special-name"
+ },
+ {
+  "id": "special-delete",
+  "find": "special-delete"
+ },
+ {
+  "id": "special-rank",
+  "find": "special-rank"
+ },
+ {
+  "id": "special-count",
+  "find": "special-count"
+ },
+ {
+  "id": "special-rank-add",
+  "find": "special-rank-add"
+ },
+ {
+  "id": "special-add",
+  "find": "special-add"
+ },
+ {
+  "id": "step1-details",
+  "find": "step1-details"
+ },
+ {
+  "id": "need-rule-list",
+  "find": "need-rule-list"
+ },
+ {
+  "id": "shift-table",
+  "find": "shift-table"
+ },
+ {
+  "id": "shift-row",
+  "find": "shift-row"
+ },
+ {
+  "id": "shift-symbol",
+  "find": "shift-symbol"
+ },
+ {
+  "id": "shift-name",
+  "find": "shift-name"
+ },
+ {
+  "id": "shift-group",
+  "find": "shift-group"
+ },
+ {
+  "id": "shift-hours",
+  "find": "shift-hours"
+ },
+ {
+  "id": "shift-detail-toggle",
+  "find": "shift-detail-toggle"
+ },
+ {
+  "id": "shift-detail",
+  "find": "shift-detail"
+ },
+ {
+  "id": "shift-counts",
+  "find": "shift-counts"
+ },
+ {
+  "id": "shift-training",
+  "find": "shift-training"
+ },
+ {
+  "id": "shift-night",
+  "find": "shift-night"
+ },
+ {
+  "id": "shift-one-per-day",
+  "find": "shift-one-per-day"
+ },
+ {
+  "id": "shift-combine",
+  "find": "shift-combine"
+ },
+ {
+  "id": "shift-color",
+  "find": "shift-color"
+ },
+ {
+  "id": "shift-delete",
+  "find": "shift-delete"
+ },
+ {
+  "id": "shift-delete-ok",
+  "find": "shift-delete-ok"
+ },
+ {
+  "id": "shift-add",
+  "find": "shift-add"
+ },
+ {
+  "id": "shift-empty",
+  "find": "shift-empty"
+ },
+ {
+  "id": "add-shift-dialog",
+  "find": "testid: 'add-shift-dialog'"
+ },
+ {
+  "id": "add-shift-symbol",
+  "find": "add-shift-symbol"
+ },
+ {
+  "id": "add-shift-name",
+  "find": "add-shift-name"
+ },
+ {
+  "id": "add-shift-group",
+  "find": "add-shift-group"
+ },
+ {
+  "id": "add-shift-night",
+  "find": "add-shift-night"
+ },
+ {
+  "id": "add-shift-counts",
+  "find": "add-shift-counts"
+ },
+ {
+  "id": "add-shift-need-full",
+  "find": "add-shift-need-full"
+ },
+ {
+  "id": "add-shift-need-part",
+  "find": "add-shift-need-part"
+ },
+ {
+  "id": "add-shift-staff",
+  "find": "add-shift-staff"
+ },
+ {
+  "id": "need-details",
+  "find": "need-details"
+ },
+ {
+  "id": "need-grid",
+  "find": "need-grid"
+ },
+ {
+  "id": "need-cell",
+  "find": "need-cell"
+ },
+ {
+  "id": "need-grid-message",
+  "find": "need-grid-message"
+ },
+ {
+  "id": "daily-skill-details",
+  "find": "daily-skill-details"
+ },
+ {
+  "id": "staff-list",
+  "find": "staff-list"
+ },
+ {
+  "id": "staff-item",
+  "find": "staff-item"
+ },
+ {
+  "id": "staff-add",
+  "find": "staff-add"
+ },
+ {
+  "id": "staff-detail",
+  "find": "staff-detail"
+ },
+ {
+  "id": "staff-back",
+  "find": "staff-back"
+ },
+ {
+  "id": "staff-name",
+  "find": "staff-name"
+ },
+ {
+  "id": "staff-employment",
+  "find": "staff-employment"
+ },
+ {
+  "id": "staff-rank",
+  "find": "staff-rank"
+ },
+ {
+  "id": "staff-shift",
+  "find": "staff-shift"
+ },
+ {
+  "id": "staff-skill",
+  "find": "staff-skill"
+ },
+ {
+  "id": "staff-off-days",
+  "find": "staff-off-days"
+ },
+ {
+  "id": "staff-paid-days",
+  "find": "staff-paid-days"
+ },
+ {
+  "id": "staff-max-consecutive",
+  "find": "staff-max-consecutive"
+ },
+ {
+  "id": "staff-group-pref",
+  "find": "staff-group-pref"
+ },
+ {
+  "id": "staff-bias-pref",
+  "find": "staff-bias-pref"
+ },
+ {
+  "id": "staff-rest-style",
+  "find": "staff-rest-style"
+ },
+ {
+  "id": "staff-weekend-pref",
+  "find": "staff-weekend-pref"
+ },
+ {
+  "id": "staff-two-off",
+  "find": "staff-two-off"
+ },
+ {
+  "id": "staff-prev-consecutive",
+  "find": "staff-prev-consecutive"
+ },
+ {
+  "id": "staff-prev-last",
+  "find": "staff-prev-last"
+ },
+ {
+  "id": "staff-memo",
+  "find": "staff-memo"
+ },
+ {
+  "id": "staff-delete",
+  "find": "staff-delete"
+ },
+ {
+  "id": "staff-delete-ok",
+  "find": "staff-delete-ok"
+ },
+ {
+  "id": "step-1〜step-6",
+  "find": "testid: `step-${s.n}`"
+ },
+ {
+  "id": "sample-restaurant / sample-retail / sample-care / sample-blank",
+  "find": "testid: `sample-${k.id}`"
+ },
+ {
+  "id": "skill-min-early など（スキルの人数）",
+  "find": "testid: `skill-${key}-${g}`"
+ },
+ {
+  "id": "shift-need-full / shift-need-part / shift-need-all",
+  "find": "testid: `shift-need-${emp}`"
+ },
+ {
+  "id": "add-shift-dialog-ok / -cancel / -error",
+  "find": "testid: `${testid}-ok`"
+ },
+ {
+  "id": "emp-name-full / emp-name-part",
+  "find": "testid: `emp-name-${emp}`"
+ }
+]
