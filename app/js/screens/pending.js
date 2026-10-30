@@ -1,6 +1,6 @@
 // まだ作っていない手順の画面。
-import { h, append } from '../dom.js?v=1.2.1';
-import { screenTitle } from './common.js?v=1.2.1';
+import { h, append } from '../dom.js?v=1.3';
+import { screenTitle } from './common.js?v=1.3';
 
 export function renderPending(el, title, when) {
   append(el,

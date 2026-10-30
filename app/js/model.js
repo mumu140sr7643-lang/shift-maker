@@ -1,6 +1,6 @@
 // データの形と、データを作る・確かめる・直す関数。
 // 画面（DOM）には触らない。ブラウザでも node（確かめの道具）でも同じものを使う。
-import { daysInMonth, weekdayOf } from './calendar.js?v=1.2.1';
+import { daysInMonth, weekdayOf } from './calendar.js?v=1.3';
 
 // データの形の版。形を変えたら 1 つ上げ、migrate() に古い形を直す手順を足す。
 export const FORMAT_VERSION = 1;
@@ -663,6 +663,42 @@ export function validateData(d) {
       }
     }
   }
+  return errs;
+}
+
+// 取り込むときだけの確かめ：数や文字の長さが、画面で使える大きさか。
+// （ブラウザに保存してあるデータは、この確かめでは断らない。読めなくなると困るため）
+export const IMPORT_LIMITS = { staff: 500, shifts: 50, ranks: 50, skills: 50, special: 62, needRules: 200, name: 100, memo: 2000 };
+
+export function importProblems(d) {
+  const L = IMPORT_LIMITS;
+  const errs = [];
+  const count = (list, max, what) => {
+    if (list.length > max) errs.push(`${what}が多すぎます（${list.length}。${max}まで）。`);
+  };
+  count(d.staff, L.staff, 'スタッフ');
+  count(d.settings.shifts, L.shifts, 'シフトの種類');
+  count(d.settings.ranks, L.ranks, '役職');
+  count(d.settings.skills, L.skills, 'スキル');
+  count(d.month.special, L.special, '特別な日');
+  count(d.settings.needRules, L.needRules, '必要人数の決まり');
+  const names = [
+    ...d.staff.map((p) => ['スタッフの名前', p.name]),
+    ...d.settings.shifts.map((s) => ['シフトの名称', s.name]),
+    ...d.settings.ranks.map((r) => ['役職の名前', r.name]),
+    ...d.settings.skills.map((k) => ['スキルの名前', k.name]),
+    ...d.month.special.map((s) => ['特別な日の名前', s.name]),
+    ...d.settings.needRules.map((r) => ['必要人数の決まりの名前', r.label ?? '']),
+    ...Object.values(d.settings.groupNames).map((n) => ['時間帯のグループの名前', n]),
+    ...Object.values(d.settings.employmentNames).map((n) => ['区分の名前', n]),
+  ];
+  for (const [what, text] of names) {
+    if (String(text).length > L.name) {
+      errs.push(`${what}が長すぎます（${String(text).length}文字。${L.name}文字まで）。`);
+      break;
+    }
+  }
+  if (d.staff.some((p) => p.memo.length > L.memo)) errs.push(`スタッフのメモが長すぎます（${L.memo}文字まで）。`);
   return errs;
 }
 

@@ -16,6 +16,7 @@
   - 名前に HTML を入れても、文字として出るか（動かないか）。希望とシフト表の表でも
   - 希望の入力（記号を選んでマスを押す・消す・キーボード）、シフト表（選ぶ小窓・夜勤の次の日の明け・固定）
   - 2月と12月・スタッフ 50 人の作り物の月で、崩れず、マスを押してから 0.3 秒以内に小窓が出るか
+  - 書き出し・取り込み（同じ中身になる・控えに残る・まずいファイルや大きすぎるファイルを断る・名前の HTML が動かない）
   - 保存データが読めないとき、控えを残して知らせるか
 終わりに、結果を JSON で表示する。1 つでも失敗があれば、終わりのコードは 1。
 """
@@ -515,6 +516,97 @@ def scenario_lock_and_ake(browser, base):
     ok(not errors, "エラー0 固定と明け", " / ".join(errors[:3]))
     ctx.close()
 
+def scenario_import(browser, base):
+    """書き出し・取り込み。まずいファイルは断って、いまのデータのまま"""
+    cases = OUT / "import-cases"
+    cases.mkdir(parents=True, exist_ok=True)
+
+    def choose(page, testid, path):
+        with page.expect_file_chooser() as fc:
+            t(page, testid).click()
+        fc.value.set_files(str(path))
+
+    # 1. 書き出したファイルの中身が、いまのデータと同じ
+    ctx, page, errors = fresh_page(browser, base, 1280, "light")
+    t(page, "sample-restaurant").click()
+    rename_first_staff(page, "AA")
+    t(page, "data-button").click()
+    with page.expect_download() as dl:
+        t(page, "export-file").click()
+    good = cases / "good.json"
+    dl.value.save_as(str(good))
+    exported = json.loads(good.read_text(encoding="utf-8"))
+    ok(exported == json.loads(stored(page)), "書き出したファイルの中身が、いまのデータと同じ")
+    ok(dl.value.suggested_filename.startswith("shift-maker_") and dl.value.suggested_filename.endswith(".json"), "書き出したファイルの名前", dl.value.suggested_filename)
+
+    # 2. ほかのデータの上に取り込む → 同じ中身になり、取り込む前のデータは控えに残る
+    reset(page)
+    t(page, "sample-retail").click()
+    rename_first_staff(page, "BB")
+    b = stored(page)
+    t(page, "data-button").click()
+    choose(page, "import-file", good)
+    text = t(page, "import-dialog").inner_text()
+    ok("good.json" in text and "控えに残します" in text, "取り込む前に、何を取り込むかと控えのことを書く")
+    t(page, "import-ok").click()
+    ok(json.loads(stored(page)) == exported, "取り込むと、ファイルと同じ中身になる")
+    ok(backup_id_of(page, b) is not None, "取り込む前のデータが控えに残る")
+    ok(t(page, "import-notice").count() == 1, "取り込んだと知らせる")
+
+    # 3. やめると何も変わらない
+    before = stored(page)
+    t(page, "data-button").click()
+    choose(page, "import-file", good)
+    t(page, "import-cancel").click()
+    ok(stored(page) == before, "取り込みで「やめる」を選ぶと、何も変わらない")
+
+    # 4. まずいファイルは断る
+    bad = {
+        "not-json.txt": "これはデータではありません",
+        "shape.json": json.dumps({"a": 1}),
+        "newer.json": json.dumps({**exported, "formatVersion": 99}, ensure_ascii=False),
+    }
+    formula = json.loads(json.dumps(exported))
+    formula["settings"]["shifts"][0]["symbol"] = "=SUM(1)"
+    bad["formula.json"] = json.dumps(formula, ensure_ascii=False)
+    longname = json.loads(json.dumps(exported))
+    longname["staff"][0]["name"] = "あ" * 200
+    bad["longname.json"] = json.dumps(longname, ensure_ascii=False)
+    missing = json.loads(json.dumps(exported))
+    missing["staff"][0]["shifts"].append("s999")
+    bad["missing-shift.json"] = json.dumps(missing, ensure_ascii=False)
+    for name, body in bad.items():
+        (cases / name).write_text(body, encoding="utf-8")
+    (cases / "big.json").write_text(" " * (6 * 1024 * 1024) + "{}", encoding="utf-8")
+    for name in [*bad.keys(), "big.json"]:
+        before = stored(page)
+        t(page, "data-button").click()
+        choose(page, "import-file", cases / name)
+        dlg = t(page, "import-error-dialog")
+        dlg.wait_for()
+        msg = dlg.inner_text()
+        ok("いまのデータは、そのままです" in msg and len(msg) > 30, f"まずいファイル（{name}）は理由を出して断る", msg[:80])
+        t(page, "import-error-close").click()
+        ok(stored(page) == before, f"まずいファイル（{name}）を断ったあと、いまのデータのまま")
+    ok(not errors, "エラー0 取り込み", " / ".join(errors[:3]))
+    ctx.close()
+
+    # 5. 名前に HTML が入ったファイルを取り込んでも、文字のまま
+    evil = json.loads(json.dumps(exported))
+    evil["staff"][0]["name"] = "<svg onload=__x=1>"
+    (cases / "evil.json").write_text(json.dumps(evil, ensure_ascii=False), encoding="utf-8")
+    ctx, page, errors = fresh_page(browser, base, 1280, "dark")
+    choose(page, "welcome-import", cases / "evil.json")
+    ok(t(page, "import-export").count() == 0, "データが無いときは「先に書き出して」を出さない")
+    t(page, "import-ok").click()
+    ok(t(page, "step-1").count() == 1 and json.loads(stored(page)) == evil, "見本を選ぶ画面から取り込んで始められる")
+    for n in [3, 4, 6]:
+        t(page, f"step-{n}").click()
+        ok(page.evaluate("() => window.__x") is None and page.locator("#screen svg:not(.lock-icon)").count() == 0, f"取り込んだ名前の HTML が、手順{n}で動かない")
+    ok("<svg onload=__x=1>" in page.locator("#screen").inner_text(), "取り込んだ名前の HTML が、文字のまま出る")
+    ok(not errors, "エラー0 取り込み（見本の画面から）", " / ".join(errors[:3]))
+    ctx.close()
+
 def scenario_month_backup(browser, base):
     ctx, page, errors = fresh_page(browser, base, 1280, "light")
     t(page, "sample-retail").click()
@@ -680,6 +772,7 @@ def main():
         scenario_requests(browser, base)
         scenario_table(browser, base)
         scenario_lock_and_ake(browser, base)
+        scenario_import(browser, base)
         scenario_big(browser, base)
         scenario_add_shift(browser, base)
         scenario_text_safety(browser, base)

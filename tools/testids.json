@@ -614,5 +614,45 @@
  {
   "id": "ake-kept-notice",
   "find": "ake-kept-notice"
+ },
+ {
+  "id": "import-file",
+  "find": "import-file"
+ },
+ {
+  "id": "welcome-import",
+  "find": "welcome-import"
+ },
+ {
+  "id": "import-input",
+  "find": "import-input"
+ },
+ {
+  "id": "import-dialog",
+  "find": "import-dialog"
+ },
+ {
+  "id": "import-ok",
+  "find": "import-ok"
+ },
+ {
+  "id": "import-cancel",
+  "find": "import-cancel"
+ },
+ {
+  "id": "import-export",
+  "find": "import-export"
+ },
+ {
+  "id": "import-error-dialog",
+  "find": "import-error-dialog"
+ },
+ {
+  "id": "import-error-close",
+  "find": "import-error-close"
+ },
+ {
+  "id": "import-notice",
+  "find": "import-notice"
  }
 ]

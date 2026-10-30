@@ -153,6 +153,27 @@ const check = (name, problems) => results.push({ name, problems });
   check(`まずいデータを断る（${cases.length} 通り）`, problems);
 }
 
+// 9b. 取り込むときの大きさの確かめ（見本は通り、大きすぎるものは断る）
+{
+  const problems = [];
+  for (const kind of ['restaurant', 'retail', 'care', 'blank']) {
+    const errs = M.importProblems(S.buildSample(kind, 2026, 11));
+    if (errs.length) problems.push(`見本 ${kind} を断ってしまう: ${errs[0]}`);
+  }
+  const good = S.buildSample('care', 2026, 11);
+  const cases = [
+    ['名前が長すぎる', (d) => { d.staff[0].name = 'あ'.repeat(M.IMPORT_LIMITS.name + 1); }],
+    ['スタッフが多すぎる', (d) => { d.staff = Array.from({ length: M.IMPORT_LIMITS.staff + 1 }, () => d.staff[0]); }],
+    ['メモが長すぎる', (d) => { d.staff[0].memo = 'x'.repeat(M.IMPORT_LIMITS.memo + 1); }],
+  ];
+  for (const [name, breakIt] of cases) {
+    const d = M.clone(good);
+    breakIt(d);
+    if (!M.importProblems(d).length) problems.push(`${name} を断れませんでした`);
+  }
+  check(`取り込むときの大きさ（${cases.length} 通り）`, problems);
+}
+
 // 10. 言葉の確かめ：一覧の言葉が、リポジトリのファイル・コミットの文に入っていないか
 {
   const listPath = process.env.SHIFT_MAKER_WORDS;

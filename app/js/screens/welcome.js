@@ -1,10 +1,11 @@
 // 初めて開いたとき（とリセットのあと）の、業種の見本を選ぶ画面。
-import { h, append } from '../dom.js?v=1.2.1';
-import { SAMPLE_KINDS, buildSample } from '../samples.js?v=1.2.1';
-import { nextMonthOf, monthLabel } from '../calendar.js?v=1.2.1';
-import { replaceData } from '../state.js?v=1.2.1';
-import { screenTitle } from './common.js?v=1.2.1';
-import { backupList, restoreBackup } from './datapanel.js?v=1.2.1';
+import { h, append } from '../dom.js?v=1.3';
+import { SAMPLE_KINDS, buildSample } from '../samples.js?v=1.3';
+import { nextMonthOf, monthLabel } from '../calendar.js?v=1.3';
+import { replaceData } from '../state.js?v=1.3';
+import { screenTitle } from './common.js?v=1.3';
+import { backupList, restoreBackup } from './datapanel.js?v=1.3';
+import { importFromFile } from './importer.js?v=1.3';
 
 function backupBox() {
   const list = backupList((b) => restoreBackup(b.id), 'welcome-backup-restore');
@@ -48,6 +49,13 @@ export function renderWelcome(el) {
       }),
     ),
     h('p', { class: 'help', text: `作る月は ${monthLabel(year, month)} です（手順1 基本設定で変えられます）。` }),
+    h(
+      'section',
+      { class: 'card' },
+      h('h2', { text: '書き出したファイルがあるとき' }),
+      h('p', { class: 'help', text: 'ほかのパソコンやブラウザで書き出したファイル（.json）を取り込んで、続きから始められます。' }),
+      h('button', { type: 'button', class: 'btn', testid: 'welcome-import', text: 'ファイルから取り込んで始める', on: { click: importFromFile } }),
+    ),
     h('p', { class: 'help', text: '入れたデータは、このブラウザの中にだけ保存されます。インターネットの向こうへは送りません。' }),
   );
 }

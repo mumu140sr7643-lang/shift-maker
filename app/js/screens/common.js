@@ -1,6 +1,6 @@
 // 画面どうしで使う小さな部品。
-import { h } from '../dom.js?v=1.2.1';
-import { notify } from '../dialog.js?v=1.2.1';
+import { h } from '../dom.js?v=1.3';
+import { notify } from '../dialog.js?v=1.3';
 
 export function warn(text) {
   notify(text, { kind: 'warn', testid: 'warn-notice' });

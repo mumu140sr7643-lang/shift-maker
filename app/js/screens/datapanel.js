@@ -1,11 +1,12 @@
 // 「保存と控え」の小窓：ひとつ前の保存に戻す・控えから戻す・書き出す・リセット。
-import { h, append } from '../dom.js?v=1.2.1';
-import { app, replaceData, rerender } from '../state.js?v=1.2.1';
-import { prevSave, loadBackups, clearData, brokenCopy, MAX_BACKUPS } from '../storage.js?v=1.2.1';
-import { planBackup, takeBackup, backupLines, backupLabel, backupSummary } from '../backup.js?v=1.2.1';
-import { ask, notify, clearNotices } from '../dialog.js?v=1.2.1';
-import { exportData, exportRaw } from '../files.js?v=1.2.1';
-import { timeLabel } from '../calendar.js?v=1.2.1';
+import { h, append } from '../dom.js?v=1.3';
+import { app, replaceData, rerender } from '../state.js?v=1.3';
+import { prevSave, loadBackups, clearData, brokenCopy, MAX_BACKUPS } from '../storage.js?v=1.3';
+import { planBackup, takeBackup, backupLines, backupLabel, backupSummary } from '../backup.js?v=1.3';
+import { ask, notify, clearNotices } from '../dialog.js?v=1.3';
+import { exportData, exportRaw } from '../files.js?v=1.3';
+import { timeLabel } from '../calendar.js?v=1.3';
+import { importFromFile } from './importer.js?v=1.3';
 
 const at = (iso) => (iso ? timeLabel(new Date(iso)) : '時刻不明');
 
@@ -159,7 +160,8 @@ export function openDataPanel() {
           }),
         },
       }),
-      h('p', { class: 'help', text: 'ファイルからの取り込みは準備中です。次の版で使えるようになります。' }),
+      h('p', { class: 'help', text: 'このアプリで書き出したファイル（.json）を取り込めます。取り込む前に中身を確かめ、いまのデータは控えに残します。' }),
+      h('button', { type: 'button', class: 'btn', testid: 'import-file', text: 'ファイルから取り込む', on: { click: then(importFromFile) } }),
       broken
         ? [
             h('p', { class: 'help', text: `前に読めなかった保存データ（${at(broken.at)}）が残っています。ファイルにして残せます。` }),
