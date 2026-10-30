@@ -13,6 +13,8 @@ import { APP_VERSION } from '../app/js/version.js';
 import { parseData } from '../app/js/storage.js';
 import * as C from '../app/js/check.js';
 import * as R from '../app/js/rules.js';
+import { solveStaged } from '../app/js/solver/stages.js';
+import highsLoader from '../vendor/highs/highs.mjs';
 
 const results = [];
 const check = (name, problems) => results.push({ name, problems });
@@ -471,6 +473,77 @@ const check = (name, problems) => results.push({ name, problems });
     if (rules(x.d).length) problems.push('間に休みの希望があるのに、続きとして知らせる');
   }
   check('希望だけで必ずエラーになるもの', problems);
+}
+
+// 13. 解く前のぶつかり（solveConflicts）：希望に、固定したマスを足して確かめる
+{
+  const problems = [];
+  const mk = () => {
+    const d = M.emptyData(2026, 11, 'blank');
+    const zero = { full: 0, part: 0, all: 0 };
+    const E = M.newShift(d, { symbol: '早', name: '早', group: 'early', need: { ...zero } });
+    const N = M.newShift(d, { symbol: '夜', name: '夜', group: 'night', night: true, need: { ...zero } });
+    d.settings.shifts = [E, N];
+    const p = M.newStaff(d, { name: 'A', shifts: [E.id, N.id], offDays: 0, paidDays: 0 });
+    d.staff = [p];
+    return { d, E, N, p };
+  };
+  const lock = (d, pid, day, v) => {
+    if (v) (d.month.table[pid] ??= {})[day] = v;
+    else delete d.month.table[pid]?.[day];
+    (d.month.marks[pid] ??= {})[day] = { locked: true };
+  };
+  const rules = (d) => C.solveConflicts(d).map((it) => it.rule);
+  for (const kind of ['restaurant', 'retail', 'care', 'blank']) {
+    if (C.solveConflicts(S.buildSample(kind, 2026, 11)).length) problems.push(`見本 ${kind} で、固定も希望も無いのに知らせが出る`);
+  }
+  {
+    const x = mk();
+    x.d.month.requests[x.p.id] = { 3: { kind: 'off' } };
+    lock(x.d, x.p.id, 3, { kind: 'shift', shift: x.E.id });
+    if (!rules(x.d).includes('requestDiff')) problems.push('固定したマスと希望が違うのに、知らせない');
+    lock(x.d, x.p.id, 3, { kind: 'off' });
+    if (rules(x.d).length) problems.push('固定したマスと希望が同じなのに、知らせる');
+  }
+  {
+    const x = mk();
+    lock(x.d, x.p.id, 3, { kind: 'shift', shift: x.N.id });
+    lock(x.d, x.p.id, 4, null);
+    if (!rules(x.d).includes('nightNext')) problems.push('夜勤を固定した次の日が、空きのまま固定されているのに知らせない');
+    const y = mk();
+    y.p.prevLastShift = y.N.id;
+    lock(y.d, y.p.id, 1, null);
+    if (!rules(y.d).includes('nightNext')) problems.push('前の月の最後が夜勤で、1日が空きのまま固定されているのに知らせない');
+  }
+  {
+    const x = mk();
+    for (const day of [1, 2, 3]) lock(x.d, x.p.id, day, { kind: 'shift', shift: x.E.id });
+    x.d.month.requests[x.p.id] = { 4: { kind: 'shift', shift: x.E.id }, 5: { kind: 'shift', shift: x.E.id }, 6: { kind: 'shift', shift: x.E.id } };
+    if (!rules(x.d).includes('sixPlus')) problems.push('固定と希望を合わせて6日続けて出勤なのに、6連勤以上を知らせない');
+  }
+  check('解く前のぶつかり（固定したマスも入れる）', problems);
+}
+
+// 14. 自動で作る（小さな月）：同じ種・同じ上限なら同じ表／固定したマスは変わらない／担当外を入れない
+{
+  const problems = [];
+  const d = S.buildSample('restaurant', 2026, 11);
+  const p0 = d.staff[0];
+  (d.month.table[p0.id] ??= {})[5] = { kind: 'paid' };
+  (d.month.marks[p0.id] ??= {})[5] = { locked: true };
+  const run = () => solveStaged(d, { loadHighs: () => highsLoader(), nodeLimit: 5, seed: 1, maxStages: 2 });
+  const a = await run();
+  const b = await run();
+  if (!a.ok) problems.push(`見本の月で作れない（${a.reason}）`);
+  else {
+    if (JSON.stringify(a.table) !== JSON.stringify(b.table)) problems.push('同じ種・同じ上限なのに、表が違う');
+    if (a.table[p0.id]?.[5]?.kind !== 'paid') problems.push('固定したマス（有給）が変わった');
+    const after = M.clone(d);
+    after.month.table = a.table;
+    const c = C.checkTable(after);
+    for (const r of ['notAssigned', 'requestDiff', 'nightNext']) if (c.byRule[r].count) problems.push(`できた表に ${r} が ${c.byRule[r].count}件`);
+  }
+  check('自動で作る（小さな月で、同じ答え・固定を守る）', problems);
 }
 
 // 10. 言葉の確かめ：一覧の言葉が、リポジトリのファイル・コミットの文に入っていないか

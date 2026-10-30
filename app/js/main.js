@@ -1,19 +1,19 @@
 // 起動と、画面の切り替え。
-import { app, setRenderers } from './state.js?v=2.3.1';
-import { loadData, brokenCopy, getPref, setPref, KEYS, parseData } from './storage.js?v=2.3.1';
-import { APP_VERSION } from './version.js?v=2.3.1';
-import { h, clear } from './dom.js?v=2.3.1';
-import { notify, clearNotices } from './dialog.js?v=2.3.1';
-import { exportRaw } from './files.js?v=2.3.1';
-import { monthLabel, timeLabel } from './calendar.js?v=2.3.1';
-import { renderWelcome } from './screens/welcome.js?v=2.3.1';
-import { renderStep1 } from './screens/step1.js?v=2.3.1';
-import { renderStep2 } from './screens/step2.js?v=2.3.1';
-import { renderStep3 } from './screens/step3.js?v=2.3.1';
-import { renderPending } from './screens/pending.js?v=2.3.1';
-import { renderStep4 } from './screens/step4.js?v=2.3.1';
-import { renderStep6 } from './screens/step6.js?v=2.3.1';
-import { openDataPanel } from './screens/datapanel.js?v=2.3.1';
+import { app, setRenderers } from './state.js?v=3.1';
+import { loadData, brokenCopy, getPref, setPref, KEYS, parseData } from './storage.js?v=3.1';
+import { APP_VERSION } from './version.js?v=3.1';
+import { h, clear } from './dom.js?v=3.1';
+import { notify, clearNotices } from './dialog.js?v=3.1';
+import { exportRaw } from './files.js?v=3.1';
+import { monthLabel, timeLabel } from './calendar.js?v=3.1';
+import { renderWelcome } from './screens/welcome.js?v=3.1';
+import { renderStep1 } from './screens/step1.js?v=3.1';
+import { renderStep2 } from './screens/step2.js?v=3.1';
+import { renderStep3 } from './screens/step3.js?v=3.1';
+import { renderPending } from './screens/pending.js?v=3.1';
+import { renderStep4 } from './screens/step4.js?v=3.1';
+import { renderStep6 } from './screens/step6.js?v=3.1';
+import { openDataPanel } from './screens/datapanel.js?v=3.1';
 
 const STEPS = [
   { n: 1, title: '基本設定', render: renderStep1 },

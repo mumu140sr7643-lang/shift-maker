@@ -16,3 +16,7 @@ python -m http.server 8765
 ```
 
 を、このフォルダで動かし、ブラウザで `http://localhost:8765/app/` を開きます。
+
+## 使っている部品
+
+- [HiGHS](https://highs.dev)（数理最適化。自動で作るで使う）：MIT ライセンス。`vendor/highs/` に、npm の `highs` 版 1.15.4（https://github.com/lovasoa/highs-js ）を手を加えずに置いています（`vendor/highs/LICENSE`）。

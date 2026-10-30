@@ -1,10 +1,10 @@
 // 手順2 シフトの種類
-import { h, append, field, select, numberInput, clear } from '../dom.js?v=2.3.1';
-import { app, commit, rerender } from '../state.js?v=2.3.1';
-import { GROUP_IDS, LIMITS, symbolProblem, newShift, removeShift, shiftUsage, setCombine } from '../model.js?v=2.3.1';
-import { ask, form } from '../dialog.js?v=2.3.1';
-import { screenTitle, section, checkbox, warn } from './common.js?v=2.3.1';
-import { needGrid } from './needgrid.js?v=2.3.1';
+import { h, append, field, select, numberInput, clear } from '../dom.js?v=3.1';
+import { app, commit, rerender } from '../state.js?v=3.1';
+import { GROUP_IDS, LIMITS, symbolProblem, newShift, removeShift, shiftUsage, setCombine } from '../model.js?v=3.1';
+import { ask, form } from '../dialog.js?v=3.1';
+import { screenTitle, section, checkbox, warn } from './common.js?v=3.1';
+import { needGrid } from './needgrid.js?v=3.1';
 
 // 開いている「詳細」と折りたたみは、画面を作り直しても開いたままにする
 const openDetails = new Set();

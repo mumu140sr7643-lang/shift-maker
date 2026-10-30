@@ -1,8 +1,8 @@
 // 決まりの検査と、良し悪しの比べ方（docs/数え方の表.md の 2 章・3 章）。
 // 画面には触らない。ブラウザでも node（tools/count.mjs）でも同じものを使う。
-import { RULES, strengthOf, cellTraits, isRestKind } from './rules.js?v=2.3.1';
-import { monthDays, shiftById, rankOrder, needOn, cellOf, cellName } from './model.js?v=2.3.1';
-import { weekdayOf } from './calendar.js?v=2.3.1';
+import { RULES, strengthOf, cellTraits, isRestKind } from './rules.js?v=3.1';
+import { monthDays, shiftById, rankOrder, needOn, cellOf, cellName } from './model.js?v=3.1';
+import { weekdayOf } from './calendar.js?v=3.1';
 
 const GROUP_IDS = ['early', 'late', 'night'];
 
@@ -306,23 +306,63 @@ export function checkTable(data) {
 // 希望の無い日は空き（連勤も組も切る）なので、希望どうしでできる続き・組だけが残る。
 const INEVITABLE = new Set(['notAssigned', 'dailySkill', 'sixPlus', 'overStreak', 'lateToEarly', 'twoOffLateEarly', 'nightNext']);
 
-export function requestConflicts(data) {
-  const table = {};
-  for (const [pid, days] of Object.entries(data.month.requests)) {
-    for (const [day, r] of Object.entries(days)) {
-      (table[pid] ??= {})[day] = r.kind === 'shift' ? { kind: 'shift', shift: r.shift } : { kind: r.kind };
-    }
-  }
-  const res = checkTable({ ...data, month: { ...data.month, table, marks: {} } });
+// fixed: { 人: { 日: マス } }（空きのまま固定したマスは入れない）
+function conflictsOf(data, fixed) {
+  const res = checkTable({ ...data, month: { ...data.month, table: fixed, marks: {} } });
   if (res.tableEmpty) return [];
-  const reqAt = (pid, day) => data.month.requests[pid]?.[day];
   return res.items.filter((it) => {
     if (!INEVITABLE.has(it.rule) || (it.strength !== 'hard' && it.strength !== 'always')) return false;
     if (it.rule !== 'nightNext') return true;
-    // 夜勤の次の日は、出勤の希望が入っているときだけ（空いていれば明けにできる）
-    const r = reqAt(it.staff, it.day);
-    return Boolean(r && r.kind !== 'off' && r.kind !== 'paid');
+    // 夜勤の次の日は、出勤（シフト・半休）に決まっているときだけ（空いていれば明けにできる）
+    const v = fixed[it.staff]?.[it.day];
+    return Boolean(v && (v.kind === 'shift' || v.kind === 'half'));
   });
+}
+
+const asCell = (r) => (r.kind === 'shift' ? { kind: 'shift', shift: r.shift } : { kind: r.kind });
+
+export function requestConflicts(data) {
+  const fixed = {};
+  for (const [pid, days] of Object.entries(data.month.requests)) {
+    for (const [day, r] of Object.entries(days)) (fixed[pid] ??= {})[day] = asCell(r);
+  }
+  return conflictsOf(data, fixed);
+}
+
+// 自動で作る前の確かめ：希望に、手で固定したマスも入れる。
+// 固定と希望が違うマス、夜勤の次の日が空きのまま固定されたマスも出す。
+export function solveConflicts(data) {
+  const fixed = {};
+  const emptyLocks = [];
+  const extra = [];
+  const md = (d) => `${data.month.month}月${d}日`;
+  for (const [pid, days] of Object.entries(data.month.requests)) {
+    for (const [day, r] of Object.entries(days)) (fixed[pid] ??= {})[day] = asCell(r);
+  }
+  for (const [pid, days] of Object.entries(data.month.marks)) {
+    const p = data.staff.find((x) => x.id === pid);
+    for (const [day, m] of Object.entries(days)) {
+      if (!m.locked) continue;
+      const v = data.month.table[pid]?.[day] ?? null;
+      const r = data.month.requests[pid]?.[day];
+      if (!v) {
+        emptyLocks.push([pid, Number(day)]);
+        if (fixed[pid]) delete fixed[pid][day];
+        continue;
+      }
+      if (r && (r.kind !== v.kind || (r.kind === 'shift' && r.shift !== v.shift))) {
+        extra.push({ rule: 'requestDiff', strength: 'hard', staff: pid, day: Number(day), text: `${p?.name || '名前なし'}さんの${md(day)}は、固定したマスが「${cellName(data, v)}」で、希望の「${cellName(data, r)}」と違います` });
+      }
+      (fixed[pid] ??= {})[day] = { ...v };
+    }
+  }
+  for (const [pid, day] of emptyLocks) {
+    const prev = day === 1 ? null : fixed[pid]?.[day - 1];
+    const p = data.staff.find((x) => x.id === pid);
+    const prevNight = day === 1 ? Boolean(p?.prevLastShift && shiftById(data, p.prevLastShift)?.night) : prev?.kind === 'shift' && Boolean(shiftById(data, prev.shift)?.night);
+    if (prevNight) extra.push({ rule: 'nightNext', strength: 'hard', staff: pid, day, text: `${p?.name || '名前なし'}さんの${md(day)}は、夜勤の次の日ですが、空きのまま固定されています` });
+  }
+  return [...extra, ...conflictsOf(data, fixed)];
 }
 
 // ---------- 良し悪しの比べ方（数え方の表の 3 章） ----------
