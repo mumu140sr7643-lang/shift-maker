@@ -1,6 +1,6 @@
 // データの形と、データを作る・確かめる・直す関数。
 // 画面（DOM）には触らない。ブラウザでも node（確かめの道具）でも同じものを使う。
-import { daysInMonth, weekdayOf } from './calendar.js?v=1.2';
+import { daysInMonth, weekdayOf } from './calendar.js?v=1.2.1';
 
 // データの形の版。形を変えたら 1 つ上げ、migrate() に古い形を直す手順を足す。
 export const FORMAT_VERSION = 1;
@@ -345,8 +345,14 @@ export function isNightShift(data, value) {
 
 // 表のマスを手で変える。
 // 夜勤を入れたら、次の日が空いていれば「明け」にする。夜勤を外したら、次の日の「明け」も外す。
+// ただし次の日が固定してあれば、明けの出し入れでは変えない（固定は「このマスを変えない」印のため）。
 // 一度自動で作った表（month.runs がある）を手で変えたら「手で変えた」の印を付ける。
-// 返す：次の日をどうしたか { what: 'ake-set' | 'ake-cleared' | 'ake-blocked', cell } か null
+// 返す：次の日をどうしたか null か
+//   { what: 'ake-set' }               明けを入れた
+//   { what: 'ake-cleared' }           明けを外した
+//   { what: 'ake-blocked', cell }     次の日がもう埋まっていたので、明けにしなかった
+//   { what: 'ake-locked', cell }      次の日が固定なので、明けにしなかった
+//   { what: 'ake-kept-locked', cell } 次の日の明けが固定なので、外さなかった
 export function setCellByHand(data, pid, day, value) {
   const t = data.month.table;
   const generated = data.month.runs.length > 0;
@@ -355,18 +361,20 @@ export function setCellByHand(data, pid, day, value) {
   if (generated) setMark(data, pid, day, 'edited', true);
   if (day >= monthDays(data)) return null;
   const next = cellOf(data, pid, day + 1);
+  const nextLocked = Boolean(marksOf(data, pid, day + 1).locked);
   if (isNightShift(data, value)) {
-    if (!next) {
-      writeCell(t, pid, day + 1, { kind: 'ake' });
-      if (generated) setMark(data, pid, day + 1, 'edited', true);
-      return { what: 'ake-set', cell: null };
-    }
-    return next.kind === 'ake' ? null : { what: 'ake-blocked', cell: next };
+    if (next?.kind === 'ake') return null;
+    if (nextLocked) return { what: 'ake-locked', cell: next };
+    if (next) return { what: 'ake-blocked', cell: next };
+    writeCell(t, pid, day + 1, { kind: 'ake' });
+    if (generated) setMark(data, pid, day + 1, 'edited', true);
+    return { what: 'ake-set' };
   }
   if (wasNight && next?.kind === 'ake') {
+    if (nextLocked) return { what: 'ake-kept-locked', cell: next };
     writeCell(t, pid, day + 1, null);
     if (generated) setMark(data, pid, day + 1, 'edited', true);
-    return { what: 'ake-cleared', cell: null };
+    return { what: 'ake-cleared' };
   }
   return null;
 }
@@ -401,6 +409,19 @@ export function removeStaff(data, staffId) {
   dropFromMonthByStaff(data, staffId);
 }
 
+// 夜勤のシフトを消すとき、一緒に消える明け（そのシフトのマスのすぐ次の日の明け。固定したものは残す）
+function akesAfter(data, shiftId) {
+  if (!shiftById(data, shiftId)?.night) return [];
+  const out = [];
+  for (const [pid, days] of Object.entries(data.month.table)) {
+    for (const [day, v] of Object.entries(days)) {
+      const next = Number(day) + 1;
+      if (v.shift === shiftId && days[next]?.kind === 'ake' && !marksOf(data, pid, next).locked) out.push([pid, next]);
+    }
+  }
+  return out;
+}
+
 // そのシフトを使っている所の数（消す前の確かめに使う）
 export function shiftUsage(data, shiftId) {
   const staff = data.staff.filter((p) => p.shifts.includes(shiftId)).length;
@@ -410,10 +431,14 @@ export function shiftUsage(data, shiftId) {
       for (const v of Object.values(days)) if (v.shift === shiftId) cells += 1;
     }
   }
-  return { staff, cells };
+  return { staff, cells, akes: akesAfter(data, shiftId).length };
 }
 
 export function removeShift(data, shiftId) {
+  for (const [pid, day] of akesAfter(data, shiftId)) {
+    writeCell(data.month.table, pid, day, null);
+    writeCell(data.month.marks, pid, day, null);
+  }
   data.settings.shifts = data.settings.shifts.filter((s) => s.id !== shiftId);
   data.settings.needRules = data.settings.needRules.filter((r) => r.shift !== shiftId);
   for (const p of data.staff) {

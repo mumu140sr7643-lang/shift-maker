@@ -1,13 +1,13 @@
 // 手順6 シフト表（いまは手で作る）。マスを押すと、入れるものを選ぶ小窓が出る。
-import { h, append } from '../dom.js?v=1.2';
-import { app, commit } from '../state.js?v=1.2';
+import { h, append } from '../dom.js?v=1.2.1';
+import { app, commit } from '../state.js?v=1.2.1';
 import {
   REST_KINDS, shiftById, cellOf, marksOf, requestOf, setCellByHand, setLock, cellSymbol, cellName,
-} from '../model.js?v=1.2';
-import { weekdayOf, WEEKDAY_LABELS } from '../calendar.js?v=1.2';
-import { notify } from '../dialog.js?v=1.2';
-import { screenTitle } from './common.js?v=1.2';
-import { staffGrid } from './staffgrid.js?v=1.2';
+} from '../model.js?v=1.2.1';
+import { weekdayOf, WEEKDAY_LABELS } from '../calendar.js?v=1.2.1';
+import { notify } from '../dialog.js?v=1.2.1';
+import { screenTitle } from './common.js?v=1.2.1';
+import { staffGrid } from './staffgrid.js?v=1.2.1';
 
 const SVG = 'http://www.w3.org/2000/svg';
 
@@ -65,11 +65,16 @@ function openPicker(p, day, refresh, returnFocus) {
     refresh(p, day);
     refresh(p, day + 1);
     close();
+    const nextDay = `${month}月${day + 1}日`;
     if (next?.what === 'ake-blocked') {
       notify(
-        `${month}月${day + 1}日には、もう「${cellName(d, next.cell)}」が入っているので、明けにしていません。夜勤の次の日は休み（明け）にする決まりです。`,
+        `${nextDay}には、もう「${cellName(d, next.cell)}」が入っているので、明けにしていません。夜勤の次の日は休み（明け）にする決まりです。`,
         { kind: 'warn', testid: 'ake-blocked-notice' },
       );
+    } else if (next?.what === 'ake-locked') {
+      notify(`${nextDay}は固定しているので、明けにしていません。夜勤の次の日は休み（明け）にする決まりです。`, { kind: 'warn', testid: 'ake-locked-notice' });
+    } else if (next?.what === 'ake-kept-locked') {
+      notify(`${nextDay}の明けは固定しているので、そのままにしました。`, { kind: 'info', testid: 'ake-kept-notice' });
     }
   };
   const same = (a, b) => (a === null && b === null) || (a && b && a.kind === b.kind && (a.kind !== 'shift' || a.shift === b.shift));

@@ -606,5 +606,13 @@
  {
   "id": "ake-blocked-notice",
   "find": "ake-blocked-notice"
+ },
+ {
+  "id": "ake-locked-notice",
+  "find": "ake-locked-notice"
+ },
+ {
+  "id": "ake-kept-notice",
+  "find": "ake-kept-notice"
  }
 ]

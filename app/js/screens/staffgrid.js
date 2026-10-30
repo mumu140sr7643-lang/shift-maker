@@ -1,9 +1,9 @@
 // スタッフ×日の表（手順4 希望の入力・手順6 シフト表）。
 // 行がスタッフ、列が日。名前の列は止まり、表の中だけ横に動く。
 // マスはボタン。Tab で表に入り、矢印キーで動き、Enter・スペースで押す（Tab で止まるのは1マスだけ）。
-import { h } from '../dom.js?v=1.2';
-import { monthDays } from '../model.js?v=1.2';
-import { weekdayOf, WEEKDAY_LABELS } from '../calendar.js?v=1.2';
+import { h } from '../dom.js?v=1.2.1';
+import { monthDays } from '../model.js?v=1.2.1';
+import { weekdayOf, WEEKDAY_LABELS } from '../calendar.js?v=1.2.1';
 
 // cell(p, day) → { text, cls: [], label, extra: Node | null }
 // onPick(p, day, button) は、マスを押したとき

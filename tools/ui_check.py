@@ -470,6 +470,51 @@ def scenario_big(browser, base):
             ok(not errors, f"エラー0 {label}", " / ".join(errors[:3]))
             ctx.close()
 
+def scenario_lock_and_ake(browser, base):
+    """固定したマスは明けの自動の出し入れで変えない。夜勤のシフトを消すと、次の日の明けも消える"""
+    ctx, page, errors = fresh_page(browser, base, 1280, "light")
+    t(page, "sample-care").click()
+    data = json.loads(stored(page))
+    night = next(s["id"] for s in data["settings"]["shifts"] if s["night"])
+    day_shift = next(s["id"] for s in data["settings"]["shifts"] if s["name"] == "日勤")
+    t(page, "step-6").click()
+    tab = lambda r: json.loads(stored(page))["month"]["table"].get(data["staff"][r]["id"], {})
+    cell = lambda r, d: page.locator(f'[data-testid="table-cell"][data-row="{r}"][data-day="{d}"]')
+
+    def pick(r, d, kind, shift=None):
+        cell(r, d).click()
+        sel = f'[data-testid="pick-option"][data-kind="{kind}"]' + (f'[data-shift="{shift}"]' if shift else "")
+        page.locator(sel).click()
+
+    def lock(r, d):
+        cell(r, d).click()
+        t(page, "pick-lock").check()
+        t(page, "picker-close").click()
+
+    # 1. 11日を空きのまま固定 → 10日に夜勤 → 11日は明けにならず、知らせる
+    lock(1, 11)
+    pick(1, 10, "shift", night)
+    ok("11" not in tab(1) and t(page, "ake-locked-notice").count() == 1, "次の日が固定なら、夜勤を入れても明けにせず知らせる")
+    # 2. 20日に夜勤（21日が明け）→ 21日を固定 → 20日を日勤に → 21日の明けは残り、知らせる
+    pick(1, 20, "shift", night)
+    lock(1, 21)
+    pick(1, 20, "shift", day_shift)
+    ok(tab(1).get("21") == {"kind": "ake"} and t(page, "ake-kept-notice").count() == 1, "次の日の明けが固定なら、夜勤を外しても明けは残し、知らせる")
+    # 3. 8日に夜勤（9日が明け）・15日に夜勤（16日が明け、固定）→ 手順2で夜勤のシフトを消す
+    pick(2, 8, "shift", night)
+    pick(3, 15, "shift", night)
+    lock(3, 16)
+    t(page, "step-2").click()
+    page.locator(f'[data-testid="shift-row"][data-shift-id="{night}"] [data-testid="shift-detail-toggle"]').click()
+    t(page, "shift-delete").click()
+    text = t(page, "dialog").inner_text()
+    ok("明け（1か所）" in text, "夜勤のシフトを消す確認の文に、消える明けの数を書く", text)
+    page.locator('[data-testid="shift-delete-ok"]').click()
+    ok("9" not in tab(2), "夜勤のシフトを消すと、その次の日の明けも消える")
+    ok(tab(3).get("16") == {"kind": "ake"}, "固定した明けは、夜勤のシフトを消しても残る")
+    ok(not errors, "エラー0 固定と明け", " / ".join(errors[:3]))
+    ctx.close()
+
 def scenario_month_backup(browser, base):
     ctx, page, errors = fresh_page(browser, base, 1280, "light")
     t(page, "sample-retail").click()
@@ -634,6 +679,7 @@ def main():
         scenario_need_grid(browser, base)
         scenario_requests(browser, base)
         scenario_table(browser, base)
+        scenario_lock_and_ake(browser, base)
         scenario_big(browser, base)
         scenario_add_shift(browser, base)
         scenario_text_safety(browser, base)

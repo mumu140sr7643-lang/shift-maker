@@ -1,10 +1,10 @@
 // 手順2 シフトの種類
-import { h, append, field, select, numberInput, clear } from '../dom.js?v=1.2';
-import { app, commit, rerender } from '../state.js?v=1.2';
-import { GROUP_IDS, LIMITS, symbolProblem, newShift, removeShift, shiftUsage, setCombine } from '../model.js?v=1.2';
-import { ask, form } from '../dialog.js?v=1.2';
-import { screenTitle, section, checkbox, warn } from './common.js?v=1.2';
-import { needGrid } from './needgrid.js?v=1.2';
+import { h, append, field, select, numberInput, clear } from '../dom.js?v=1.2.1';
+import { app, commit, rerender } from '../state.js?v=1.2.1';
+import { GROUP_IDS, LIMITS, symbolProblem, newShift, removeShift, shiftUsage, setCombine } from '../model.js?v=1.2.1';
+import { ask, form } from '../dialog.js?v=1.2.1';
+import { screenTitle, section, checkbox, warn } from './common.js?v=1.2.1';
+import { needGrid } from './needgrid.js?v=1.2.1';
 
 // 開いている「詳細」と折りたたみは、画面を作り直しても開いたままにする
 const openDetails = new Set();
@@ -122,6 +122,7 @@ function shiftRows(refreshGrid) {
       const lines = [];
       if (usage.staff) lines.push(`このシフトを担当できる人（${usage.staff}人）から外れます。`);
       if (usage.cells) lines.push(`希望・シフト表でこのシフトを使っているマス（${usage.cells}か所）も消えます。`);
+      if (usage.akes) lines.push(`シフト表で、その次の日の明け（${usage.akes}か所）も消えます（固定した明けは残します）。`);
       lines.push('日ごとの必要人数と、このシフトの必要人数の決まりも消えます。');
       const v = await ask({
         title: `シフト「${s.symbol}」を消しますか？`,
