@@ -1,13 +1,13 @@
 // ファイルから取り込む。取り込む前に中身を全部確かめ、正しくなければ断って、いまのデータのままにする。
-import { h } from '../dom.js?v=1.3.1';
-import { app, replaceData } from '../state.js?v=1.3.1';
-import { parseData } from '../storage.js?v=1.3.1';
-import { importProblems } from '../model.js?v=1.3.1';
-import { takeBackup, backupLines } from '../backup.js?v=1.3.1';
-import { SAMPLE_KINDS } from '../samples.js?v=1.3.1';
-import { monthLabel } from '../calendar.js?v=1.3.1';
-import { exportData } from '../files.js?v=1.3.1';
-import { ask, notify } from '../dialog.js?v=1.3.1';
+import { h } from '../dom.js?v=1.3.2';
+import { app, replaceData } from '../state.js?v=1.3.2';
+import { parseData } from '../storage.js?v=1.3.2';
+import { importProblems } from '../model.js?v=1.3.2';
+import { takeBackup, backupLines } from '../backup.js?v=1.3.2';
+import { SAMPLE_KINDS } from '../samples.js?v=1.3.2';
+import { monthLabel } from '../calendar.js?v=1.3.2';
+import { exportData } from '../files.js?v=1.3.2';
+import { ask, notify } from '../dialog.js?v=1.3.2';
 
 export const MAX_IMPORT_BYTES = 5 * 1024 * 1024;
 
@@ -54,7 +54,7 @@ export async function importFromFile() {
   const file = await pickFile();
   if (!file) return;
   if (file.size > MAX_IMPORT_BYTES) {
-    await refuse([`ファイルが大きすぎます（${Math.ceil(file.size / 1024 / 1024)}MB）。このアプリで書き出したファイルは、ふつう 1MB より小さくなります。`]);
+    await refuse([`ファイルが大きすぎます（${(file.size / 1024 / 1024).toFixed(1)}MB。5MB まで）。このアプリで書き出したファイルは、ふつう 1MB より小さくなります。`]);
     return;
   }
   let text;

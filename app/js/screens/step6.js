@@ -1,13 +1,13 @@
 // 手順6 シフト表（いまは手で作る）。マスを押すと、入れるものを選ぶ小窓が出る。
-import { h, append } from '../dom.js?v=1.3.1';
-import { app, commit } from '../state.js?v=1.3.1';
+import { h, append } from '../dom.js?v=1.3.2';
+import { app, commit } from '../state.js?v=1.3.2';
 import {
   REST_KINDS, shiftById, cellOf, marksOf, requestOf, setCellByHand, setLock, cellSymbol, cellName,
-} from '../model.js?v=1.3.1';
-import { weekdayOf, WEEKDAY_LABELS } from '../calendar.js?v=1.3.1';
-import { notify } from '../dialog.js?v=1.3.1';
-import { screenTitle } from './common.js?v=1.3.1';
-import { staffGrid } from './staffgrid.js?v=1.3.1';
+} from '../model.js?v=1.3.2';
+import { weekdayOf, WEEKDAY_LABELS } from '../calendar.js?v=1.3.2';
+import { notify } from '../dialog.js?v=1.3.2';
+import { screenTitle } from './common.js?v=1.3.2';
+import { staffGrid } from './staffgrid.js?v=1.3.2';
 
 const SVG = 'http://www.w3.org/2000/svg';
 

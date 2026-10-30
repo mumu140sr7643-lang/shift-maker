@@ -586,6 +586,8 @@ def scenario_import(browser, base):
         dlg.wait_for()
         msg = dlg.inner_text()
         ok("いまのデータは、そのままです" in msg and len(msg) > 30, f"まずいファイル（{name}）は理由を出して断る", msg[:80])
+        if name == "big.json":
+            ok("6.0MB" in msg, "大きすぎるファイルの大きさを、小数1けたで正しく書く", msg[:80])
         t(page, "import-error-close").click()
         ok(stored(page) == before, f"まずいファイル（{name}）を断ったあと、いまのデータのまま")
     ok(not errors, "エラー0 取り込み", " / ".join(errors[:3]))

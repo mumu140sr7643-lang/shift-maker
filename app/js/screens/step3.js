@@ -1,9 +1,9 @@
 // 手順3 スタッフ（左に一覧、右に選んだ人の詳細。スマホでは一覧→詳細）
-import { h, append, field, select, numberInput, clear } from '../dom.js?v=1.3.1';
-import { app, commit, rerender } from '../state.js?v=1.3.1';
-import { LIMITS, newStaff, removeStaff, staffById, rankById } from '../model.js?v=1.3.1';
-import { ask } from '../dialog.js?v=1.3.1';
-import { screenTitle, checkbox, textInput, warn } from './common.js?v=1.3.1';
+import { h, append, field, select, numberInput, clear } from '../dom.js?v=1.3.2';
+import { app, commit, rerender } from '../state.js?v=1.3.2';
+import { LIMITS, newStaff, removeStaff, staffById, rankById } from '../model.js?v=1.3.2';
+import { ask } from '../dialog.js?v=1.3.2';
+import { screenTitle, checkbox, textInput, warn } from './common.js?v=1.3.2';
 
 const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
