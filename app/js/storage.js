@@ -1,6 +1,6 @@
 // ブラウザの中への保存。保存の名前は、すべて頭に「shift-maker:」を付ける
 // （同じアカウントの GitHub Pages は、ほかのアプリと保存場所が同じため）。
-import { migrate, validateData } from './model.js?v=1.1';
+import { migrate, validateData } from './model.js?v=1.1.2';
 
 export const PREFIX = 'shift-maker:';
 export const KEYS = {
@@ -8,7 +8,8 @@ export const KEYS = {
   prev: PREFIX + 'data-prev',
   savedAt: PREFIX + 'saved-at',
   prevAt: PREFIX + 'prev-at',
-  backup: PREFIX + 'backup',
+  backup: PREFIX + 'backup', // 版 1.1 の形（1つだけ）。読むときに backups へ移す
+  backups: PREFIX + 'backups',
   broken: PREFIX + 'broken',
   theme: PREFIX + 'theme',
   step: PREFIX + 'step',
@@ -18,6 +19,8 @@ export const BACKUP_REASONS = {
   reset: 'リセットの前',
   month: '月を片付ける前',
   import: '取り込む前',
+  restore: '控えから戻す前',
+  prev: 'ひとつ前の保存に戻す前',
 };
 
 function get(key) {
@@ -100,7 +103,7 @@ export function saveData(data) {
   return { ok: true, at };
 }
 
-// リセット：いまの保存を「ひとつ前の保存」へ回してから消す（控えは先に saveBackup で残すこと）
+// リセット：いまの保存を「ひとつ前の保存」へ回してから消す（控えは先に backup.js の takeBackup で残すこと）
 export function clearData() {
   const old = get(KEYS.data);
   if (old !== null) {
@@ -118,22 +121,51 @@ export function prevSave() {
   return r.data ? { data: r.data, at: get(KEYS.prevAt) || null } : null;
 }
 
-// 消す・置きかえる操作の前の控え。あとの自動保存では上書きされない。いちばん新しい1つだけ残す。
-export function saveBackup(reason, data) {
-  return set(KEYS.backup, JSON.stringify({ reason, at: new Date().toISOString(), data }));
+// 消す・置きかえる操作の前の控え。あとの自動保存では上書きされない。
+// 新しい順に MAX_BACKUPS 個まで残す（いつ・何をする前の控えかを選んで戻せる）。
+// 控えを作るかどうか（何も変えていない見本・同じ控えがあるとき）は backup.js が決める。
+export const MAX_BACKUPS = 5;
+
+function readBackupList() {
+  const raw = get(KEYS.backups);
+  let list = [];
+  if (raw) {
+    try {
+      list = JSON.parse(raw);
+    } catch {
+      list = [];
+    }
+  }
+  if (!Array.isArray(list)) list = [];
+  // 版 1.1 の控え（1つだけの形）を、一覧の形へ移す
+  const old = get(KEYS.backup);
+  if (old) {
+    try {
+      const b = JSON.parse(old);
+      list.push({ id: `b-${b.at}`, reason: b.reason, at: b.at, data: b.data });
+      list.sort((x, y) => String(y.at).localeCompare(String(x.at)));
+      if (set(KEYS.backups, JSON.stringify(list.slice(0, MAX_BACKUPS)))) remove(KEYS.backup);
+    } catch {
+      /* 読めない古い控えは、そのまま残しておく */
+    }
+  }
+  return list.slice(0, MAX_BACKUPS);
 }
 
-export function loadBackup() {
-  const raw = get(KEYS.backup);
-  if (!raw) return null;
-  try {
-    const b = JSON.parse(raw);
-    const r = parseData(JSON.stringify(b.data));
-    if (!r.data) return null;
-    return { reason: b.reason, at: b.at, data: r.data };
-  } catch {
-    return null;
-  }
+// 読めるものだけを、新しい順に返す
+export function loadBackups() {
+  return readBackupList().flatMap((b) => {
+    const r = parseData(JSON.stringify(b?.data));
+    return r.data && b.id ? [{ id: b.id, reason: b.reason, at: b.at, data: r.data }] : [];
+  });
+}
+
+// 控えを1つ足す（いちばん古いものは、数を超えたら消える）。書けたら true
+export function addBackup(reason, data) {
+  const at = new Date().toISOString();
+  const list = readBackupList();
+  list.unshift({ id: `b-${at}-${Math.random().toString(36).slice(2, 7)}`, reason, at, data });
+  return set(KEYS.backups, JSON.stringify(list.slice(0, MAX_BACKUPS)));
 }
 
 export function getPref(key) {

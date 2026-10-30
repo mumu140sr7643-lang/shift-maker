@@ -1,13 +1,15 @@
 """ブラウザで実際に押して確かめる道具（Playwright）。作り物の見本データだけを使う。
 
-使い方:  python tools/ui_check.py            （Chromium で確かめる）
-        python tools/ui_check.py --shots    （画面の写真も tools/out/ に残す）
+使い方:  python tools/ui_check.py                     （Chromium で確かめる）
+        python tools/ui_check.py --channel msedge    （Edge で確かめる）
+        python tools/ui_check.py --shots             （画面の写真も tools/out/ に残す）
 
 確かめること:
   - 明るい・暗い × 幅 1280 / 390 / 375 で、ページの横のはみ出しが 0 か
   - 読みにくい文字（コントラスト 4.5:1 未満。大きい文字は 3:1 未満）が 0 か
   - JavaScript のエラーが 0 か
   - 控えから戻すと、前のデータが 1 文字も違わずに戻るか（リセット・月の片付け）
+  - リセット・月の片付けを何回続けても、確認の文で「消える」と言ったもの以外は戻せるか
   - ひとつ前の保存に戻せるか
   - 日ごとの必要人数のキーボード操作
   - シフトを追加の小窓で、まずい記号を断るか
@@ -27,6 +29,7 @@ from playwright.sync_api import sync_playwright
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "tools" / "out"
 SHOTS = "--shots" in sys.argv
+CHANNEL = sys.argv[sys.argv.index("--channel") + 1] if "--channel" in sys.argv else None
 PREFIX = "shift-maker:"
 
 CONTRAST_JS = r"""
@@ -219,15 +222,133 @@ def scenario_reset_backup(browser, base):
     ctx.close()
 
 
+def rename_first_staff(page, name):
+    t(page, "step-3").click()
+    t(page, "staff-item").first.click()
+    t(page, "staff-name").fill(name)
+    t(page, "staff-name").press("Tab")
+
+
+def reset(page):
+    t(page, "data-button").click()
+    t(page, "reset").click()
+    text = t(page, "reset-dialog").inner_text()
+    t(page, "reset-ok").click()
+    page.wait_for_selector('[data-testid="welcome"]')
+    return text
+
+
+def backup_id_of(page, data_text):
+    return page.evaluate(
+        """(text) => {
+          const list = JSON.parse(localStorage.getItem('shift-maker:backups') || '[]');
+          const b = list.find((x) => JSON.stringify(x.data) === text);
+          return b ? b.id : null;
+        }""",
+        data_text,
+    )
+
+
+def scenario_backup_sequences(browser, base):
+    """確かめ役の 3 つの順番。どれも最後に A が 1 文字も違わずに戻ること"""
+    # 1. A → リセット → 見本 → 何も変えずにリセット → 見本 → 何も変えずにリセット → A に戻す
+    ctx, page, errors = fresh_page(browser, base, 1280, "light")
+    t(page, "sample-restaurant").click()
+    rename_first_staff(page, "AA")
+    a = stored(page)
+    reset(page)
+    for _ in range(2):
+        t(page, "sample-retail").click()
+        text = reset(page)
+        ok("何も変えていない" in text, "見本のままでリセットするとき、控えを作らないと書く")
+    ok(page.locator('[data-testid="notices"] > *').count() <= 1, "リセットを続けても、古い知らせが重ならない")
+    bid = backup_id_of(page, a)
+    ok(bid is not None, "順番1：何も変えずにリセットを続けても、A の控えが残る")
+    if bid:
+        page.locator(f'[data-testid="welcome-backup-restore"][data-backup-id="{bid}"]').click()
+        ok(stored(page) == a, "順番1：A が 1 文字も違わずに戻る")
+    ok(not errors, "エラー0 順番1", " / ".join(errors[:3]))
+    ctx.close()
+
+    # 2. A → リセット → 見本 → 1 つ変えてリセット → A に戻す
+    ctx, page, errors = fresh_page(browser, base, 1280, "light")
+    t(page, "sample-restaurant").click()
+    rename_first_staff(page, "AA")
+    a = stored(page)
+    reset(page)
+    t(page, "sample-retail").click()
+    rename_first_staff(page, "BB")
+    b = stored(page)
+    text = reset(page)
+    ok("控えに残します" in text, "変えたデータでリセットするとき、控えに残すと書く")
+    ok(backup_id_of(page, b) is not None, "順番2：2回目のリセットの前のデータ B も控えに残る")
+    bid = backup_id_of(page, a)
+    ok(bid is not None, "順番2：A の控えが残る")
+    if bid:
+        page.locator(f'[data-testid="welcome-backup-restore"][data-backup-id="{bid}"]').click()
+        ok(stored(page) == a, "順番2：A が 1 文字も違わずに戻る")
+    ok(not errors, "エラー0 順番2", " / ".join(errors[:3]))
+    ctx.close()
+
+    # 3. A → 月の片付け → 特別な日を 1 つ足す → 月の片付け → A に戻す
+    ctx, page, errors = fresh_page(browser, base, 1280, "light")
+    t(page, "sample-retail").click()
+    rename_first_staff(page, "AA")
+    a = stored(page)
+    m = json.loads(a)["month"]
+    for k in range(2):
+        t(page, "step-1").click()
+        y, mo = m["year"], m["month"] + 1 + k
+        y, mo = (y + (mo - 1) // 12, (mo - 1) % 12 + 1)
+        if k == 1:
+            t(page, "special-add").click()
+        t(page, "target-month").fill(f"{y}-{mo:02d}")
+        t(page, "target-month-apply").click()
+        page.wait_for_selector('[data-testid="month-dialog"]')
+        t(page, "month-clear").click()
+    bid = backup_id_of(page, a)
+    ok(bid is not None, "順番3：月の片付けを2回続けても、A の控えが残る")
+    if bid:
+        t(page, "data-button").click()
+        page.locator(f'[data-testid="restore-backup"][data-backup-id="{bid}"]').click()
+        t(page, "restore-backup-ok").click()
+        ok(stored(page) == a, "順番3：A が 1 文字も違わずに戻る")
+    ok(not errors, "エラー0 順番3", " / ".join(errors[:3]))
+    ctx.close()
+
+    # 4. 控えがいっぱいのとき、消える控えを確認の文に書く
+    ctx, page, errors = fresh_page(browser, base, 1280, "light")
+    t(page, "sample-care").click()
+    texts = []
+    for i in range(6):
+        rename_first_staff(page, f"X{i}")
+        texts.append(reset(page))
+        t(page, "sample-care").click()
+    ok(all("消えます" not in x for x in texts[:5]), "控えが5つになるまでは、消える控えは無い")
+    ok("いちばん古い控え" in texts[5] and "消えます" in texts[5], "6つ目の控えを作るとき、いちばん古い控えが消えると書く")
+    n = page.evaluate("() => JSON.parse(localStorage.getItem('shift-maker:backups')).length")
+    ok(n == 5, "控えは5つまで", str(n))
+    ok(not errors, "エラー0 控えがいっぱい", " / ".join(errors[:3]))
+    ctx.close()
+
+
 def scenario_month_backup(browser, base):
     ctx, page, errors = fresh_page(browser, base, 1280, "light")
     t(page, "sample-retail").click()
-    before = stored(page)
-    m = json.loads(before)["month"]
+    m = json.loads(stored(page))["month"]
     ny, nm = (m["year"] + 1, 1) if m["month"] == 12 else (m["year"], m["month"] + 1)
+    # 見本のままなら、控えを作らないと書く（やめて戻る）
+    t(page, "target-month").fill(f"{ny}-{nm:02d}")
+    t(page, "target-month-apply").click()
+    ok("何も変えていない" in t(page, "month-dialog").inner_text(), "見本のままで月を片付けるとき、控えを作らないと書く")
+    t(page, "month-cancel").click()
+    rename_first_staff(page, "AA")
+    t(page, "step-1").click()
+    before = stored(page)
     t(page, "target-month").fill(f"{ny}-{nm:02d}")
     t(page, "target-month-apply").click()
     page.wait_for_selector('[data-testid="month-dialog"]')
+    ok("控えに残します" in t(page, "month-dialog").inner_text(), "変えたデータで月を片付けるとき、控えに残すと書く")
     t(page, "month-clear").click()
     data = json.loads(stored(page))
     ok(data["month"]["month"] == nm and not data["month"]["special"], "月を切り替えると、特別な日が片付く")
@@ -351,24 +472,28 @@ def scenario_broken(browser, base):
     raw = page.evaluate(f"() => JSON.parse(localStorage.getItem('{PREFIX}broken')).raw")
     ok(raw == "{broken", "読めなかったデータを控えに残す")
     ok(stored(page) == "{broken", "読めなかったデータを見本で上書きしない（選ぶまで）")
+    t(page, "sample-blank").click()
+    t(page, "data-button").click()
+    ok(t(page, "broken-export-panel").count() == 1, "見本を選んだあとも、読めなかったデータを「保存と控え」からファイルにできる")
     ctx.close()
 
 
 def main():
     with Server() as srv, sync_playwright() as pw:
         base = f"http://127.0.0.1:{srv.port}"
-        browser = pw.chromium.launch()
+        browser = pw.chromium.launch(channel=CHANNEL) if CHANNEL else pw.chromium.launch()
         for scheme in ["light", "dark"]:
             for width in [1280, 390, 375]:
                 tour(browser, base, width, scheme)
         scenario_reset_backup(browser, base)
         scenario_month_backup(browser, base)
+        scenario_backup_sequences(browser, base)
         scenario_need_grid(browser, base)
         scenario_add_shift(browser, base)
         scenario_text_safety(browser, base)
         scenario_broken(browser, base)
         browser.close()
-    print(json.dumps({"合格": len(results["pass"]), "不合格": results["fail"]}, ensure_ascii=False, indent=2))
+    print(json.dumps({"ブラウザ": CHANNEL or "chromium", "合格": len(results["pass"]), "不合格": results["fail"]}, ensure_ascii=False, indent=2))
     sys.exit(1 if results["fail"] else 0)
 
 

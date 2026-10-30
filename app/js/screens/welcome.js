@@ -1,32 +1,19 @@
 // 初めて開いたとき（とリセットのあと）の、業種の見本を選ぶ画面。
-import { h, append } from '../dom.js?v=1.1';
-import { SAMPLE_KINDS, buildSample } from '../samples.js?v=1.1';
-import { nextMonthOf, monthLabel, timeLabel } from '../calendar.js?v=1.1';
-import { replaceData } from '../state.js?v=1.1';
-import { loadBackup, BACKUP_REASONS } from '../storage.js?v=1.1';
-import { notify } from '../dialog.js?v=1.1';
-import { screenTitle } from './common.js?v=1.1';
+import { h, append } from '../dom.js?v=1.1.2';
+import { SAMPLE_KINDS, buildSample } from '../samples.js?v=1.1.2';
+import { nextMonthOf, monthLabel } from '../calendar.js?v=1.1.2';
+import { replaceData } from '../state.js?v=1.1.2';
+import { screenTitle } from './common.js?v=1.1.2';
+import { backupList, restoreBackup } from './datapanel.js?v=1.1.2';
 
 function backupBox() {
-  const b = loadBackup();
-  if (!b) return null;
-  const what = BACKUP_REASONS[b.reason] || '前';
+  const list = backupList((b) => restoreBackup(b.id), 'welcome-backup-restore');
+  if (!list) return null;
   return h(
     'div',
     { class: 'card card-note', testid: 'welcome-backup' },
-    h('p', { text: `${what}（${timeLabel(new Date(b.at))}）のデータが控えに残っています。前のデータに戻したいときは、ここから戻せます。` }),
-    h('button', {
-      type: 'button',
-      class: 'btn',
-      testid: 'welcome-backup-restore',
-      text: `${what}に戻す`,
-      on: {
-        click: () => {
-          replaceData(b.data, { step: 1 });
-          notify(`${what}のデータに戻しました。`, { kind: 'ok', testid: 'restored-notice' });
-        },
-      },
-    }),
+    h('p', { text: '前のデータが控えに残っています。前のデータに戻したいときは、ここから戻せます。' }),
+    list,
   );
 }
 

@@ -1,7 +1,7 @@
 // 業種の見本。スタッフはすべて作り物（A・B・C…）。
 // 「ちょうど良くきつい月」に合わせるのは、自動で作れるようになってから（v3）。
-import { emptyData, newRank, newSkill, newShift, newStaff, newSpecialDay, newId } from './model.js?v=1.1';
-import { daysInMonth } from './calendar.js?v=1.1';
+import { emptyData, newRank, newSkill, newShift, newStaff, newSpecialDay, newId, canonicalJSON } from './model.js?v=1.1.2';
+import { daysInMonth } from './calendar.js?v=1.1.2';
 
 export const SAMPLE_KINDS = [
   {
@@ -146,6 +146,12 @@ function care(d) {
 }
 
 const BUILDERS = { restaurant, retail, care, blank: () => {} };
+
+// 見本を選んだまま、何も変えていないか（それなら消えても、同じ見本をいつでも選び直せる）
+export function isUntouchedSample(data) {
+  if (!BUILDERS[data?.sample]) return false;
+  return canonicalJSON(buildSample(data.sample, data.month.year, data.month.month)) === canonicalJSON(data);
+}
 
 export function buildSample(kind, year, month) {
   if (!BUILDERS[kind]) throw new Error(`見本「${kind}」はありません。`);

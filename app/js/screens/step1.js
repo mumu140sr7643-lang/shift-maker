@@ -1,15 +1,15 @@
 // 手順1 基本設定
-import { h, append, field, select, numberInput } from '../dom.js?v=1.1';
-import { app, commit } from '../state.js?v=1.1';
+import { h, append, field, select, numberInput } from '../dom.js?v=1.1.2';
+import { app, commit } from '../state.js?v=1.1.2';
 import {
   GROUP_IDS, LIMITS, newRank, newSkill, newSpecialDay, staffWithRank, removeRank, removeSkill,
   monthHasContent, switchMonth, monthDays, shiftById,
-} from '../model.js?v=1.1';
-import { monthLabel, weekdayOf, WEEKDAY_LABELS, isNextMonth } from '../calendar.js?v=1.1';
-import { ask, notify } from '../dialog.js?v=1.1';
-import { saveBackup } from '../storage.js?v=1.1';
-import { exportData } from '../files.js?v=1.1';
-import { screenTitle, section, checkbox, textInput, warn } from './common.js?v=1.1';
+} from '../model.js?v=1.1.2';
+import { monthLabel, weekdayOf, WEEKDAY_LABELS, isNextMonth } from '../calendar.js?v=1.1.2';
+import { ask, notify } from '../dialog.js?v=1.1.2';
+import { takeBackup, backupLines } from '../backup.js?v=1.1.2';
+import { exportData } from '../files.js?v=1.1.2';
+import { screenTitle, section, checkbox, textInput, warn } from './common.js?v=1.1.2';
 
 function monthValue(y, m) {
   return `${y}-${String(m).padStart(2, '0')}`;
@@ -28,7 +28,7 @@ async function changeMonth(input) {
   if (monthHasContent(d)) {
     const lines = [
       `${from}の、日付のついたデータ（特別な日・日ごとの必要人数・希望・シフト表など）を片付けてから、${to}に切り替えます。スタッフと設定は残ります。`,
-      '片付ける前のデータは控えに残し、「月を片付ける前に戻す」で戻せます。',
+      ...backupLines(d),
     ];
     if (isNextMonth(d.month, { year: y, month: m })) {
       lines.push('前の月の終わりの連勤日数と最後のシフトは、手順3 スタッフで1人ずつ入れてください（自動で引き継ぐしくみは、あとの版で入ります）。');
@@ -48,7 +48,7 @@ async function changeMonth(input) {
       return;
     }
     if (v === 'export') exportData(d);
-    if (!saveBackup('month', d)) {
+    if (!takeBackup('month', d)) {
       notify('ブラウザに控えを保存できなかったので、月の切り替えをやめました。先に「保存と控え」からファイルに書き出してください。', { kind: 'error', testid: 'error-notice' });
       input.value = monthValue(d.month.year, d.month.month);
       return;

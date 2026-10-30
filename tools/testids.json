@@ -534,5 +534,13 @@
  {
   "id": "emp-name-full / emp-name-part",
   "find": "testid: `emp-name-${emp}`"
+ },
+ {
+  "id": "backup-list",
+  "find": "backup-list"
+ },
+ {
+  "id": "broken-export-panel",
+  "find": "broken-export-panel"
  }
 ]

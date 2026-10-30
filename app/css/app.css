@@ -290,6 +290,21 @@ fieldset.field { border: 1px solid var(--border); border-radius: 8px; padding: 8
 .dialog-error:empty { display: none; }
 .dialog-error:not(:empty) { padding: 8px; }
 .panel-part { border-top: 1px solid var(--border); padding-top: 8px; margin-top: 8px; }
+.backup-list { list-style: none; padding: 0; margin: 8px 0; display: grid; gap: 8px; }
+.backup-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+}
+.backup-list li > div { flex: 1 1 220px; min-width: 0; }
+.backup-list .help { margin: 0; }
 
 /* 見本を選ぶ画面 */
 .sample-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 16px; margin: 16px 0; }

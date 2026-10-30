@@ -1,5 +1,6 @@
 // いまのデータと画面の状態。変えるときは commit() を通す（自動で保存する）。
-import { saveData } from './storage.js?v=1.1';
+import { saveData } from './storage.js?v=1.1.2';
+import { clearNotices } from './dialog.js?v=1.1.2';
 
 export const app = {
   data: null,
@@ -39,8 +40,10 @@ export function commit(mutate, { render = false } = {}) {
   else renderChrome();
 }
 
-// データをまるごと置きかえる（見本・控えから戻す・取り込み）
+// データをまるごと置きかえる（見本・控えから戻す・取り込み）。
+// 前のデータについての知らせは、もう当てはまらないので消す
 export function replaceData(data, { step = null } = {}) {
+  clearNotices();
   app.data = data;
   app.selectedStaff = null;
   if (step !== null) app.step = step;
