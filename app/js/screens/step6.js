@@ -1,16 +1,16 @@
 // 手順6 シフト表。マスを押すと、入れるものを選ぶ小窓が出る。変えるたびに決まりを検査し直し、印・件数の帯・一覧を直す。
-import { h, append } from '../dom.js?v=2.2';
-import { app, commit } from '../state.js?v=2.2';
+import { h, append } from '../dom.js?v=2.3';
+import { app, commit } from '../state.js?v=2.3';
 import {
   REST_KINDS, shiftById, cellOf, marksOf, requestOf, setCellByHand, setLock, cellSymbol, cellName,
-} from '../model.js?v=2.2';
-import { weekdayOf, WEEKDAY_LABELS } from '../calendar.js?v=2.2';
-import { notify } from '../dialog.js?v=2.2';
-import { checkTable } from '../check.js?v=2.2';
-import { screenTitle } from './common.js?v=2.2';
-import { staffGrid } from './staffgrid.js?v=2.2';
-import { needGrid } from './needgrid.js?v=2.2';
-import { markIndex, markClasses, markBadges, countBand, errorList, worsened } from './checkview.js?v=2.2';
+} from '../model.js?v=2.3';
+import { weekdayOf, WEEKDAY_LABELS } from '../calendar.js?v=2.3';
+import { notify } from '../dialog.js?v=2.3';
+import { checkTable } from '../check.js?v=2.3';
+import { screenTitle } from './common.js?v=2.3';
+import { staffGrid } from './staffgrid.js?v=2.3';
+import { needGrid } from './needgrid.js?v=2.3';
+import { markIndex, markClasses, markBadges, countBand, errorList, worsened } from './checkview.js?v=2.3';
 
 const SVG = 'http://www.w3.org/2000/svg';
 const NL = String.fromCharCode(10); // マウスを置いたときの文の改行

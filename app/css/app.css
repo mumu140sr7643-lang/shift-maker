@@ -585,6 +585,29 @@ button.band-item { cursor: pointer; }
 .need-grid td.is-over { box-shadow: inset 0 0 0 2px var(--mk-soft); border-radius: 4px; }
 .swatch-short { border: 2px solid var(--mk-hard); }
 
+/* 希望だけで必ずエラーになるもの */
+.conflicts { margin: 8px 0 12px; padding: 10px 12px; border-radius: 8px; border-left: 5px solid var(--mk-hard); background: var(--error-bg); color: var(--error-text); }
+.conflicts h3 { margin: 0 0 4px; }
+.conflicts .help { color: var(--error-text); }
+.conflicts ul { margin: 4px 0 0; padding-left: 1.2em; }
+
+/* 決まりごとの強さ */
+.strength-list { display: grid; gap: 12px; margin-bottom: 12px; }
+.strength-group h4 { margin: 4px 0; font-size: 0.95rem; }
+.strength-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 12px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+}
+.strength-name { display: flex; flex-direction: column; flex: 1 1 240px; min-width: 0; }
+.strength-title { font-weight: 600; }
+.strength-name .help { margin: 0; }
+.strength-fixed { font-size: 0.9rem; color: var(--text-muted); }
+
 /* スタッフ */
 .staff-layout { display: grid; grid-template-columns: minmax(220px, 300px) minmax(0, 1fr); gap: 16px; align-items: start; }
 .staff-list { list-style: none; padding: 0; margin: 0 0 12px; display: grid; gap: 6px; max-height: 70vh; overflow-y: auto; }

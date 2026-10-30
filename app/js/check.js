@@ -1,8 +1,8 @@
 // 決まりの検査と、良し悪しの比べ方（docs/数え方の表.md の 2 章・3 章）。
 // 画面には触らない。ブラウザでも node（tools/count.mjs）でも同じものを使う。
-import { RULES, strengthOf, cellTraits, isRestKind } from './rules.js?v=2.2';
-import { monthDays, shiftById, rankOrder, needOn, cellOf, cellName } from './model.js?v=2.2';
-import { weekdayOf } from './calendar.js?v=2.2';
+import { RULES, strengthOf, cellTraits, isRestKind } from './rules.js?v=2.3';
+import { monthDays, shiftById, rankOrder, needOn, cellOf, cellName } from './model.js?v=2.3';
+import { weekdayOf } from './calendar.js?v=2.3';
 
 const GROUP_IDS = ['early', 'late', 'night'];
 
@@ -297,6 +297,31 @@ export function checkTable(data) {
     byRule,
     items,
   };
+}
+
+// ---------- 希望だけで必ずエラーになるもの（手順4の知らせ。v3 の解く前の確かめにも使う） ----------
+
+// 希望の表だけでシフト表を作ったつもりで検査し、どう作ってもなくならない「絶対」と6連勤以上だけを返す。
+// 希望の無い日は空き（連勤も組も切る）なので、希望どうしでできる続き・組だけが残る。
+const INEVITABLE = new Set(['notAssigned', 'dailySkill', 'sixPlus', 'overStreak', 'lateToEarly', 'twoOffLateEarly', 'nightNext']);
+
+export function requestConflicts(data) {
+  const table = {};
+  for (const [pid, days] of Object.entries(data.month.requests)) {
+    for (const [day, r] of Object.entries(days)) {
+      (table[pid] ??= {})[day] = r.kind === 'shift' ? { kind: 'shift', shift: r.shift } : { kind: r.kind };
+    }
+  }
+  const res = checkTable({ ...data, month: { ...data.month, table, marks: {} } });
+  if (res.tableEmpty) return [];
+  const reqAt = (pid, day) => data.month.requests[pid]?.[day];
+  return res.items.filter((it) => {
+    if (!INEVITABLE.has(it.rule) || (it.strength !== 'hard' && it.strength !== 'always')) return false;
+    if (it.rule !== 'nightNext') return true;
+    // 夜勤の次の日は、出勤の希望が入っているときだけ（空いていれば明けにできる）
+    const r = reqAt(it.staff, it.day);
+    return Boolean(r && r.kind !== 'off' && r.kind !== 'paid');
+  });
 }
 
 // ---------- 良し悪しの比べ方（数え方の表の 3 章） ----------

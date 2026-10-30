@@ -1,9 +1,11 @@
 // 手順4 希望の入力：上の記号を選んでから、表のマスを押すと入る。
-import { h, append } from '../dom.js?v=2.2';
-import { app, commit } from '../state.js?v=2.2';
-import { REST_KINDS, shiftById, requestOf, setRequest, cellSymbol, cellName } from '../model.js?v=2.2';
-import { screenTitle } from './common.js?v=2.2';
-import { staffGrid } from './staffgrid.js?v=2.2';
+import { h, append } from '../dom.js?v=2.3';
+import { app, commit } from '../state.js?v=2.3';
+import { REST_KINDS, shiftById, requestOf, setRequest, cellSymbol, cellName } from '../model.js?v=2.3';
+import { screenTitle } from './common.js?v=2.3';
+import { requestConflicts } from '../check.js?v=2.3';
+import { RULE_BY_ID } from '../rules.js?v=2.3';
+import { staffGrid } from './staffgrid.js?v=2.3';
 
 // 選んでいる記号（画面を作り直しても残す）。'off' | 'paid' | 'half' | シフトの番号 | 'clear'
 let brush = 'off';
@@ -70,6 +72,19 @@ export function renderStep4(el) {
     return;
   }
   const status = h('p', { class: 'help', role: 'status', testid: 'request-status' });
+  const conflictBox = h('div', { class: 'conflicts', testid: 'request-conflicts', role: 'status' });
+  const drawConflicts = () => {
+    const list = requestConflicts(app.data);
+    conflictBox.textContent = '';
+    conflictBox.hidden = list.length === 0;
+    conflictBox.dataset.count = String(list.length);
+    if (!list.length) return;
+    conflictBox.append(
+      h('h3', { text: `希望だけで、どう作っても決まりに合わなくなるものがあります（${list.length}件）` }),
+      h('p', { class: 'help', text: 'この希望のままだと、手順6や自動で作るときに必ずエラーになります。希望を変えるか、手順3 スタッフの担当できるシフト・手順1 の決まりを見直してください。' }),
+      h('ul', {}, list.map((it) => h('li', { text: `${RULE_BY_ID[it.rule].name}：${it.text}` }))),
+    );
+  };
   const paletteBox = h('div');
   const showStatus = () => {
     const v = brushValue(d);
@@ -93,9 +108,11 @@ export function renderStep4(el) {
       const next = brush === 'clear' || sameRequest(now, want) ? null : want;
       commit((x) => setRequest(x, p.id, day, next));
       grid.refresh(p, day);
+      drawConflicts();
     },
   });
   redrawPalette();
+  drawConflicts();
   append(
     el,
     h(
@@ -109,6 +126,7 @@ export function renderStep4(el) {
       'section',
       { class: 'card' },
       h('h2', { text: '2. 表のマスを押す' }),
+      conflictBox,
       h('p', { class: 'help', text: '行がスタッフ、列が日です。表は横に動かせます。キーボードでは、矢印キーで動いて Enter で入ります。' }),
       grid.el,
     ),

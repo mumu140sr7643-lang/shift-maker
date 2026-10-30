@@ -413,6 +413,49 @@ const check = (name, problems) => results.push({ name, problems });
   check('数え方の小さな例（数え方の表 第2版）', problems);
 }
 
+// 12. 希望だけで必ずエラーになるもの（requestConflicts）
+{
+  const problems = [];
+  const mk = () => {
+    const d = M.emptyData(2026, 11, 'blank');
+    const zero = { full: 0, part: 0, all: 0 };
+    const E = M.newShift(d, { symbol: '早', name: '早', group: 'early', need: { ...zero } });
+    const N = M.newShift(d, { symbol: '夜', name: '夜', group: 'night', night: true, need: { ...zero } });
+    const X = M.newShift(d, { symbol: '外', name: '担当外', group: 'early', need: { ...zero } });
+    d.settings.shifts = [E, N, X];
+    const p = M.newStaff(d, { name: 'A', shifts: [E.id, N.id], offDays: 0, paidDays: 0 });
+    d.staff = [p];
+    return { d, E, N, X, p };
+  };
+  const rules = (d) => C.requestConflicts(d).map((it) => it.rule);
+  for (const kind of ['restaurant', 'retail', 'care', 'blank']) {
+    if (C.requestConflicts(S.buildSample(kind, 2026, 11)).length) problems.push(`見本 ${kind} で、希望が無いのに知らせが出る`);
+  }
+  {
+    const x = mk();
+    x.d.month.requests[x.p.id] = { 3: { kind: 'shift', shift: x.X.id } };
+    if (!rules(x.d).includes('notAssigned')) problems.push('担当外のシフトの希望を、知らせない');
+  }
+  {
+    const x = mk();
+    x.d.month.requests[x.p.id] = { 3: { kind: 'shift', shift: x.N.id }, 4: { kind: 'shift', shift: x.E.id } };
+    if (!rules(x.d).includes('nightNext')) problems.push('夜勤の次の日に出勤の希望を、知らせない');
+    x.d.month.requests[x.p.id] = { 3: { kind: 'shift', shift: x.N.id } };
+    if (rules(x.d).includes('nightNext')) problems.push('夜勤の次の日に希望が無いのに知らせる（明けにできる）');
+    x.d.month.requests[x.p.id] = { 3: { kind: 'shift', shift: x.N.id }, 4: { kind: 'off' } };
+    if (rules(x.d).includes('nightNext')) problems.push('夜勤の次の日が休みの希望なのに知らせる');
+  }
+  {
+    const x = mk();
+    x.d.month.requests[x.p.id] = Object.fromEntries([1, 2, 3, 4, 5, 6].map((day) => [day, { kind: 'shift', shift: x.E.id }]));
+    const r = rules(x.d);
+    if (!r.includes('sixPlus') || !r.includes('overStreak')) problems.push(`6日続けて出勤の希望で、6連勤以上と連勤超過を知らせない（${r.join(',')}）`);
+    x.d.month.requests[x.p.id][4] = { kind: 'off' };
+    if (rules(x.d).length) problems.push('間に休みの希望があるのに、続きとして知らせる');
+  }
+  check('希望だけで必ずエラーになるもの', problems);
+}
+
 // 10. 言葉の確かめ：一覧の言葉が、リポジトリのファイル・コミットの文に入っていないか
 {
   const listPath = process.env.SHIFT_MAKER_WORDS;

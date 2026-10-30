@@ -1,15 +1,16 @@
 // 手順1 基本設定
-import { h, append, field, select, numberInput } from '../dom.js?v=2.2';
-import { app, commit } from '../state.js?v=2.2';
+import { h, append, field, select, numberInput } from '../dom.js?v=2.3';
+import { app, commit } from '../state.js?v=2.3';
 import {
   GROUP_IDS, LIMITS, newRank, newSkill, newSpecialDay, staffWithRank, removeRank, removeSkill,
   monthHasContent, switchMonth, monthDays, shiftById,
-} from '../model.js?v=2.2';
-import { monthLabel, weekdayOf, WEEKDAY_LABELS, isNextMonth } from '../calendar.js?v=2.2';
-import { ask, notify } from '../dialog.js?v=2.2';
-import { takeBackup, backupLines } from '../backup.js?v=2.2';
-import { exportData } from '../files.js?v=2.2';
-import { screenTitle, section, checkbox, textInput, warn } from './common.js?v=2.2';
+} from '../model.js?v=2.3';
+import { monthLabel, weekdayOf, WEEKDAY_LABELS, isNextMonth } from '../calendar.js?v=2.3';
+import { ask, notify } from '../dialog.js?v=2.3';
+import { takeBackup, backupLines } from '../backup.js?v=2.3';
+import { exportData } from '../files.js?v=2.3';
+import { screenTitle, section, checkbox, textInput, warn } from './common.js?v=2.3';
+import { RULES, RULE_GROUPS, strengthOf, setStrength } from '../rules.js?v=2.3';
 
 function monthValue(y, m) {
   return `${y}-${String(m).padStart(2, '0')}`;
@@ -77,7 +78,7 @@ function workSection() {
     h(
       'div',
       { class: 'field' },
-      checkbox(label, w[key], (v) => commit((d) => { d.settings.work[key] = v; }), { testid }),
+      checkbox(label, w[key], (v) => commit((d) => { d.settings.work[key] = v; }, { render: true }), { testid }),
       help ? h('p', { class: 'help', text: help }) : null,
     );
   return section(
@@ -87,7 +88,7 @@ function workSection() {
       'div',
       { class: 'grid-fields' },
       num('maxConsecutive', '連勤の上限（日）', LIMITS.consecutive, 'これより長く続けて出勤すると「連勤超過」になります。', 'work-max-consecutive'),
-      num('restRun', '連休の目安（日）', LIMITS.restRun, '続けて休むときに、何日続くのがよいかの目安です。', 'work-rest-run'),
+      num('restRun', '連休の目安（日）', LIMITS.restRun, '続けて休むときに、何日続くのがよいかの目安です。目安より3日以上長い連休は「連休が長すぎる」になります。目安以上の連休が月に1回もない（「連休にしたい」人は2回）と「連休の回数が足りない」になります。', 'work-rest-run'),
       num('maxSwitches', '時間帯の切り替え回数の上限（回／月）', LIMITS.switches, '早い時間帯と遅い時間帯が入れかわる回数の上限です。', 'work-max-switches'),
       num('biasAllowance', '早い・遅いの偏りを許す日数（日）', LIMITS.bias, '「均等」の人で、早い時間帯と遅い時間帯の日数の差がこれより大きいと知らせます。', 'work-bias'),
       num('halfDayHours', '半休の日の労働時間（時間）', LIMITS.hours, '集計表の労働時間に使います。', 'work-half-hours', 0.5),
@@ -354,20 +355,55 @@ function ruleSentence(d, r) {
   return `${when}は、「${s ? s.symbol : '?'}」${emp}を${how}`;
 }
 
+// 決まりごとの強さ。開いたままにする（強さを変えると画面を作り直すため）
+let detailOpen = false;
+
+function strengthRows(d0) {
+  const options = [
+    { value: 'hard', label: '絶対' },
+    { value: 'soft', label: 'できれば' },
+    { value: 'off', label: 'なし（数えない）' },
+  ];
+  return RULE_GROUPS.map((g) =>
+    h(
+      'div',
+      { class: 'strength-group' },
+      h('h4', { text: g.name }),
+      RULES.filter((r) => r.group === g.id).map((r) =>
+        h(
+          'div',
+          { class: 'strength-row', testid: 'strength-row', dataset: { rule: r.id } },
+          h('div', { class: 'strength-name' }, h('span', { class: 'strength-title', text: r.name }), h('span', { class: 'help', text: r.help })),
+          r.fixed
+            ? h('span', { class: 'strength-fixed', testid: `strength-${r.id}`, text: r.strength === 'always' ? 'いつも数える（変えられない）' : '絶対（変えられない）' })
+            : select(options, strengthOf(d0, r.id), {
+                'aria-label': `「${r.name}」の強さ`,
+                testid: `strength-${r.id}`,
+                on: { change: (e) => commit((d) => setStrength(d, r.id, e.target.value), { render: true }) },
+              }),
+        ),
+      ),
+    ),
+  );
+}
+
 function detailSection() {
   const d0 = app.data;
-  return h(
+  const box = h(
     'details',
-    { class: 'card', testid: 'step1-details' },
+    { class: 'card', testid: 'step1-details', open: detailOpen },
     h('summary', { text: '詳しい設定（ふだんは使わなくてかまいません）' }),
     h('h3', { text: '決まりごとの強さ' }),
-    h('p', { class: 'help', text: '準備中です。次の版で使えるようになります。' }),
+    h('p', { class: 'help', text: '「絶対」は必ず守る決まり、「できれば」はなるべく守る決まりです。「なし」にした決まりは数えません。手順6の件数の帯と、自動で作るとき（あとの版）に使います。上の「勤務の決まり」のチェックを外すのと、強さを「なし」にするのは同じです。' }),
+    h('div', { class: 'strength-list', testid: 'strength-list' }, strengthRows(d0)),
     h('h3', { text: '必要人数の決まり' }),
     d0.settings.needRules.length
       ? h('ul', { testid: 'need-rule-list' }, d0.settings.needRules.map((r) => h('li', { text: `${r.label}：${ruleSentence(d0, r)}` })))
       : h('p', { class: 'help', text: 'いまは決まりがありません。' }),
     h('p', { class: 'help', text: '決まりを足す・変える画面は準備中です。あとの版で使えるようになります。いまは、見本に入っている決まりが使われます（手順2の「日ごとの必要人数」で、点線の下線が付いた日）。' }),
   );
+  box.addEventListener('toggle', () => { detailOpen = box.open; });
+  return box;
 }
 
 export function renderStep1(el) {

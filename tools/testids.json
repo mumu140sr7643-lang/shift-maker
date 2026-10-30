@@ -698,5 +698,21 @@
  {
   "id": "error-group-six / -hard / -soft",
   "find": "testid: `error-group-${lv}`"
+ },
+ {
+  "id": "strength-list",
+  "find": "strength-list"
+ },
+ {
+  "id": "strength-row",
+  "find": "strength-row"
+ },
+ {
+  "id": "strength-（決まりの中の名前）",
+  "find": "testid: `strength-${r.id}`"
+ },
+ {
+  "id": "request-conflicts",
+  "find": "request-conflicts"
  }
 ]

@@ -18,6 +18,7 @@
   - 2月と12月・スタッフ 50 人の作り物の月で、崩れず、マスを押してから 0.3 秒以内に小窓が出るか
   - 書き出し・取り込み（同じ中身になる・控えに残る・まずいファイルや大きすぎるファイルを断る・名前の HTML が動かない）
   - 検査の画面（空の表の案内・6連勤以上の印と「悪くなりました」・一覧から動く・配置した人数・件数の帯と印が tools/count.mjs と同じ）
+  - 決まりの強さ（手順1のチェックと1つの値・強さで件数が移る）と、希望だけで必ずエラーになるものの知らせ
   - 保存データが読めないとき、控えを残して知らせるか
 終わりに、結果を JSON で表示する。1 つでも失敗があれば、終わりのコードは 1。
 """
@@ -811,6 +812,68 @@ def scenario_check_view(browser, base):
         ok(not errors, f"エラー0 種{seed}", " / ".join(errors[:3]))
         ctx.close()
 
+def scenario_strengths(browser, base):
+    """2-3：決まりの強さと手順1のチェックが1つの値・強さで件数が動く・希望だけで必ずエラーになるもの"""
+    ctx, page, errors = fresh_page(browser, base, 1280, "light")
+    t(page, "sample-restaurant").click()
+    page.locator('[data-testid="step1-details"] > summary').click()
+    ok(t(page, "strength-row").count() == 28, "決まりの強さが28個並ぶ", str(t(page, "strength-row").count()))
+    ok(page.locator('[data-testid="strength-sixPlus"]').inner_text().startswith("いつも数える"), "6連勤以上は選べない（いつも数える）")
+    ok(page.locator('[data-testid="strength-requestDiff"]').inner_text().startswith("絶対"), "希望と違うは選べない（絶対）")
+    ok("目安より3日以上長い" in page.locator('[data-testid="work-rest-run"]').locator("xpath=..").inner_text(), "連休の目安の説明に、連休が長すぎるの線を書く")
+    # 強さ「なし」でチェックが外れる。チェックを入れると強さが戻る
+    page.locator('[data-testid="strength-lateToEarly"]').select_option("off")
+    ok(not t(page, "work-forbid-late-early").is_checked(), "遅い→早いの強さを「なし」にすると、手順1のチェックが外れる")
+    ok(json.loads(stored(page))["settings"]["work"]["forbidLateToEarly"] is False, "保存も外れる")
+    t(page, "work-forbid-late-early").check()
+    ok(page.locator('[data-testid="strength-lateToEarly"]').input_value() == "hard", "チェックを入れると、強さが「絶対」に戻る")
+    t(page, "work-avoid-single-off").uncheck()
+    ok(page.locator('[data-testid="strength-singleOff"]').input_value() == "off", "1日だけの休みのチェックを外すと、強さが「なし」になる")
+    ok(t(page, "step1-details").get_attribute("open") is not None, "強さを変えても、詳しい設定は開いたまま")
+    # 強さで件数が動く：公休が足りないを「できれば」にすると、絶対から外れてできればに入る
+    t(page, "step-6").click()
+    page.locator('[data-testid="table-cell"][data-row="0"][data-day="1"]').click()
+    page.locator('[data-testid="pick-option"][data-kind="off"]').click()
+    hard1 = int(t(page, "band-hard").get_attribute("data-count"))
+    soft1 = int(t(page, "band-soft").get_attribute("data-count"))
+    t(page, "step-1").click()
+    page.locator('[data-testid="strength-offShort"]').select_option("soft")
+    t(page, "step-6").click()
+    hard2 = int(t(page, "band-hard").get_attribute("data-count"))
+    soft2 = int(t(page, "band-soft").get_attribute("data-count"))
+    ok(hard2 < hard1 and soft2 - soft1 == hard1 - hard2, "強さを「できれば」にすると、件数が絶対からできればへ移る", f"{hard1}/{soft1} → {hard2}/{soft2}")
+    # 希望だけで必ずエラーになるもの
+    data = json.loads(stored(page))
+    p0 = data["staff"][0]
+    not_mine = next((s["id"] for s in data["settings"]["shifts"] if s["id"] not in p0["shifts"]), None)
+    t(page, "step-4").click()
+    box = t(page, "request-conflicts")
+    ok(box.is_hidden(), "ぶつかる希望が無いときは、知らせを出さない")
+    sid = p0["shifts"][0]
+    page.locator(f'[data-testid="brush"][data-brush="{sid}"]').click()
+    for d in range(1, 7):
+        page.locator(f'[data-testid="request-cell"][data-row="0"][data-day="{d}"]').click()
+    ok(box.is_visible() and "6連勤以上" in box.inner_text(), "6日続けて出勤の希望で、知らせを出す", box.inner_text()[:80])
+    if not_mine:
+        page.locator(f'[data-testid="brush"][data-brush="{not_mine}"]').click()
+        page.locator('[data-testid="request-cell"][data-row="0"][data-day="10"]').click()
+        ok("担当外のシフト" in box.inner_text(), "担当外のシフトの希望で、知らせを出す")
+        page.locator('[data-testid="brush"][data-brush="clear"]').click()
+        page.locator('[data-testid="request-cell"][data-row="0"][data-day="10"]').click()
+    page.locator('[data-testid="brush"][data-brush="off"]').click()
+    page.locator('[data-testid="request-cell"][data-row="0"][data-day="4"]').click()
+    ok(box.is_hidden(), "希望を直すと、知らせが消える")
+    look(page, "希望の知らせ 1280 light")
+    ok(not errors, "エラー0 決まりの強さ", " / ".join(errors[:3]))
+    ctx.close()
+    # スマホの幅・暗い画面で、強さの画面
+    ctx, page, errors = fresh_page(browser, base, 375, "dark")
+    t(page, "sample-care").click()
+    page.locator('[data-testid="step1-details"] > summary').click()
+    look(page, "決まりの強さ 375 dark", "strengths-dark-375")
+    ok(not errors, "エラー0 決まりの強さ 375", " / ".join(errors[:3]))
+    ctx.close()
+
 def scenario_month_backup(browser, base):
     ctx, page, errors = fresh_page(browser, base, 1280, "light")
     t(page, "sample-retail").click()
@@ -979,6 +1042,7 @@ def main():
         scenario_import(browser, base)
         scenario_import_more(browser, base)
         scenario_check_view(browser, base)
+        scenario_strengths(browser, base)
         scenario_big(browser, base)
         scenario_add_shift(browser, base)
         scenario_text_safety(browser, base)
