@@ -38,6 +38,20 @@
 - 置き場所：リポジトリの外の別の箱（venv）`C:\Users\kazuk\portfolio-shift\try-ortools-parts\venv` に入れます。このパソコンの protobuf は 7.35 で、ortools は 6.34 未満が要るため、ふだんの Python は変えません。
 - ブラウザ用の `cp-sat-wasm`（npm。2026-10-26 に初めて出た個人の配布物）は、いまは落とさない・使いません。ブラウザ版の部品も変えるかは、パソコン版のあとで決めます。
 - **ダウンロードは、利用者の「よい」を作り手の会話でもらってからにします**（ファイルを落とす前に、名前・出どころ・大きさを伝えて聞く決まりのため）。
+- **入れたもの**（2026-10-31。利用者の「落としてよい」（作り手の会話）による）：`pip download ortools==9.15.6755 --only-binary=:all:` で `try-ortools-parts\wheels` に落とし、どのファイルも SHA-256 が PyPI の記録と同じことを確かめてから、落としたファイルだけで venv に入れた（`pip install --no-index --find-links wheels`）。合わせて 48.3MB。Python 3.13.5。ふだんの Python の protobuf は 7.35.0 のまま。pandas が使う python-dateutil・six・tzdata も入った。
+
+| ファイル | MB | SHA-256（PyPI の記録と同じ） |
+|---|---|---|
+| `absl_py-2.5.1-py3-none-any.whl` | 0.14 | `721200f2f0e9960f2ca9dc3a2a706b201f5f75d812c158f059cbbe29eeafbdb8` |
+| `immutabledict-4.3.1-py3-none-any.whl` | 0.01 | `c9facdc0ff30fdb8e35bd16532026cac472a549e182c94fa201b51b25e4bf7bf` |
+| `numpy-2.5.4-cp313-cp313-win_amd64.whl` | 12.57 | `8b4d2fd2d34e5f8c9235ee787de5631a37a28402b15cb80814df973d2be54129` |
+| `ortools-9.15.6755-cp313-cp313-win_amd64.whl` | 23.91 | `caac1d48b967adb877da2abcaf82c28f0f908a7cc208a6a1bbe01bc69590816c` |
+| `pandas-3.1.0-cp313-cp313-win_amd64.whl` | 10.73 | `07807035ad66de0d833d68f9bee05801dbf08b88d56a233b0e9fd189372c3261` |
+| `protobuf-6.33.6-cp310-abi3-win_amd64.whl` | 0.44 | `0cd27b587afca21b7cfa59a74dcbd48a50f0a6400cfb59391340ad729d91d326` |
+| `python_dateutil-3.0.0-py2.py3-none-any.whl` | 0.09 | `3c79630202e4152c6add678446984236efe4f57e84d8e892aab0637bab82e9fd` |
+| `six-1.17.0-py2.py3-none-any.whl` | 0.01 | `4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274` |
+| `typing_extensions-4.16.0-py3-none-any.whl` | 0.05 | `481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8` |
+| `tzdata-2026.6-py2.py3-none-any.whl` | 0.35 | `0a10eec6e13ef16b627fabed9a5f2ba61a62b1c67f327305f4e7e412a70b4aec` |
 
 ---
 
@@ -77,7 +91,7 @@
   - 出すもの：段ごとの結果（解ききったか・量・秒）、できた表（取り込める JSON）、`count.mjs` と同じ形の数、Python のメモリのいちばん多い所（Windows の PeakWorkingSet）、ortools の版。
 - `node tools/cpsat-same.mjs`：式が正しく移ったかの確かめ（小さな月で、HiGHS と CP-SAT が両方「解ききった」段の最小値が同じか、上限を4倍にしても同じか、上限に当たっていないか）。
 - `node tools/cpsat-bench.mjs [--only H,C8,C4,C1,C8-600,finish,summary]`：下の 4 章の測りを回し、全部の答えを保存して、比べの表を作ります。
-- Python は、ふだんの Python を変えないよう、別の箱（venv。`try-ortools-partsenv`）のものを使います（`SHIFT_MAKER_PYTHON` で場所を渡す）。
+- Python は、ふだんの Python を変えないよう、別の箱（venv。`try-ortools-parts\venv`）のものを使います（`SHIFT_MAKER_PYTHON` で場所を渡す）。
 
 ---
 

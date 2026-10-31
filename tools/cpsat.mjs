@@ -26,7 +26,7 @@ export const PYTHON = process.env.SHIFT_MAKER_PYTHON || 'python';
 
 function runPython(input) {
   return new Promise((resolve) => {
-    const p = spawn(PYTHON, [join(ROOT, 'tools', 'cpsat_run.py')], { stdio: ['pipe', 'pipe', 'pipe'] });
+    const p = spawn(PYTHON, ['-B', join(ROOT, 'tools', 'cpsat_run.py')], { stdio: ['pipe', 'pipe', 'pipe'] });
     const out = [];
     const err = [];
     p.stdout.on('data', (b) => out.push(b));

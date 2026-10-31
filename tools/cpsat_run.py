@@ -24,7 +24,6 @@ from fractions import Fraction
 from math import gcd
 
 import ortools
-from ortools.sat import cp_model_pb2
 from ortools.sat.python import cp_model
 
 IMPORT_SECONDS = time.perf_counter() - T_IMPORT
@@ -50,6 +49,9 @@ def peak_memory():
                     ('PagefileUsage', ctypes.c_size_t), ('PeakPagefileUsage', ctypes.c_size_t)]
     pmc = PMC()
     pmc.cb = ctypes.sizeof(PMC)
+    # 64ビットでは、ハンドルの形を決めておかないと読めない
+    ctypes.windll.kernel32.GetCurrentProcess.restype = wintypes.HANDLE
+    ctypes.windll.psapi.GetProcessMemoryInfo.argtypes = [wintypes.HANDLE, ctypes.POINTER(PMC), wintypes.DWORD]
     ctypes.windll.psapi.GetProcessMemoryInfo(ctypes.windll.kernel32.GetCurrentProcess(), ctypes.byref(pmc), pmc.cb)
     return pmc.PeakWorkingSetSize
 
@@ -65,7 +67,14 @@ def parse_terms(tokens):
             sign = 1 if t == '+' else -1
             i += 1
             continue
-        out.append((sign * Fraction(t), tokens[i + 1]))
+        try:
+            coef = Fraction(t)
+        except ValueError:  # 係数の無い項（例：fixzero: zero = 0）は係数 1
+            out.append((Fraction(sign), t))
+            sign = 1
+            i += 1
+            continue
+        out.append((sign * coef, tokens[i + 1]))
         sign = 1
         i += 2
     return out
@@ -134,7 +143,9 @@ class Model:
                         scale[v] = s
                         changed = True
         self.scale = scale
-        proto = cp_model_pb2.CpModelProto()
+        # ortools 9.15 の式の入れ物（CpModel の proto）に、じかに書く
+        self.base = cp_model.CpModel()
+        proto = self.base.proto
         for v in names:
             var = proto.variables.add()
             var.name = v
@@ -200,8 +211,9 @@ def run(msg):
             'vars': len(model.names), 'cons': model.rows, 'scaled': sum(1 for s in model.scale.values() if s != 1), 'workers': workers, 'seed': seed, 'time': total}
     for i, st in enumerate(stages):
         m, coefs, const = objs[i]
-        p = cp_model_pb2.CpModelProto()
-        p.CopyFrom(model.proto)
+        cm = cp_model.CpModel()
+        p = cm.proto
+        p.copy_from(model.proto)
         for bc, bmax in bounds:
             c = p.constraints.add()
             c.linear.vars.extend([j for _, j in bc])
@@ -212,8 +224,6 @@ def run(msg):
         if last is not None:
             p.solution_hint.vars.extend(range(len(model.names)))
             p.solution_hint.values.extend(last)
-        cm = cp_model.CpModel()
-        cm.Proto().CopyFrom(p)
         solver = cp_model.CpSolver()
         solver.parameters.max_time_in_seconds = max(0.1, budget_for(i, len(stages), total, time.perf_counter() - t0))
         solver.parameters.num_workers = workers

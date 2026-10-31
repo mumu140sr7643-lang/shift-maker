@@ -1,3 +1,4 @@
 tools/out/
 node_modules/
 .claude/
+__pycache__/
