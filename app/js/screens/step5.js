@@ -1,17 +1,17 @@
 // 手順5 自動で作る：1分で作る（おためし）。計算は裏方（solver/worker.js の Web Worker）で行うので、画面は固まらない。
 // 計算は写しで行い、終わってから、そのあいだにデータが変わっていないことを確かめて本物の表に入れる。
-import { h, append } from '../dom.js?v=4.2';
-import { app, rerender, goStep } from '../state.js?v=4.2';
-import { record, undo, nextUndo } from '../history.js?v=4.2';
-import { canonicalJSON, clone, applyGenerated } from '../model.js?v=4.2';
-import { checkTable, solveConflicts, unavoidableErrors } from '../check.js?v=4.2';
-import { RULE_BY_ID } from '../rules.js?v=4.2';
-import { ask, notify } from '../dialog.js?v=4.2';
-import { takeBackup, backupLines } from '../backup.js?v=4.2';
-import { timeLabel } from '../calendar.js?v=4.2';
-import { screenTitle } from './common.js?v=4.2';
-import { countBand } from './checkview.js?v=4.2';
-import { startSolving, isSolving, quickSeconds } from './solving.js?v=4.2';
+import { h, append } from '../dom.js?v=4.3';
+import { app, rerender, goStep } from '../state.js?v=4.3';
+import { record, undo, nextUndo } from '../history.js?v=4.3';
+import { canonicalJSON, clone, applyGenerated } from '../model.js?v=4.3';
+import { checkTable, solveConflicts, unavoidableErrors } from '../check.js?v=4.3';
+import { RULE_BY_ID } from '../rules.js?v=4.3';
+import { ask, notify } from '../dialog.js?v=4.3';
+import { takeBackup, backupLines } from '../backup.js?v=4.3';
+import { timeLabel } from '../calendar.js?v=4.3';
+import { screenTitle } from './common.js?v=4.3';
+import { countBand } from './checkview.js?v=4.3';
+import { startSolving, isSolving, quickSeconds } from './solving.js?v=4.3';
 
 // 元に戻すの履歴での呼び名（手順6 の「元に戻す」にも出る）
 const GENERATED_LABEL = '自動で作った表';

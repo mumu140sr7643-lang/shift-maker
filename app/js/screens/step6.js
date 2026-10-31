@@ -1,20 +1,22 @@
 // 手順6 シフト表。マスを押すと、入れるものを選ぶ小窓が出る。変えるたびに決まりを検査し直し、印・件数の帯・一覧を直す。
 // 変えた所は履歴（history.js）に積み、「元に戻す」「やり直す」で戻せる。同じ日の2人のマスは、ドラッグか小窓で入れ替えられる。
 // 「エラーを自動で直す」の案を見ているあいだは、表を案の表に切りかえて見せる（repairview.js）。
-import { h, append } from '../dom.js?v=4.2';
-import { app } from '../state.js?v=4.2';
+import { h, append } from '../dom.js?v=4.3';
+import { app } from '../state.js?v=4.3';
 import {
   REST_KINDS, shiftById, cellOf, marksOf, requestOf, setCellByHand, setLock, swapCells, cellSymbol, cellName,
-} from '../model.js?v=4.2';
-import { record, undo, redo, nextUndo, nextRedo } from '../history.js?v=4.2';
-import { weekdayOf, WEEKDAY_LABELS } from '../calendar.js?v=4.2';
-import { notify } from '../dialog.js?v=4.2';
-import { checkTable } from '../check.js?v=4.2';
-import { screenTitle } from './common.js?v=4.2';
-import { staffGrid } from './staffgrid.js?v=4.2';
-import { needGrid } from './needgrid.js?v=4.2';
-import { markIndex, markClasses, markBadges, countBand, errorList, worsened } from './checkview.js?v=4.2';
-import { currentPreview, previewCard, openRepair, openRestart, repairBlockReason } from './repairview.js?v=4.2';
+} from '../model.js?v=4.3';
+import { record, undo, redo, nextUndo, nextRedo } from '../history.js?v=4.3';
+import { weekdayOf, WEEKDAY_LABELS } from '../calendar.js?v=4.3';
+import { notify } from '../dialog.js?v=4.3';
+import { checkTable } from '../check.js?v=4.3';
+import { screenTitle } from './common.js?v=4.3';
+import { staffGrid } from './staffgrid.js?v=4.3';
+import { needGrid } from './needgrid.js?v=4.3';
+import { markIndex, markClasses, markBadges, countBand, errorList, worsened } from './checkview.js?v=4.3';
+import { currentPreview, previewCard, openRepair, openRestart, repairBlockReason } from './repairview.js?v=4.3';
+import { summarize, summaryColumns } from '../summary.js?v=4.3';
+import { exportCsv, exportExcel } from '../files.js?v=4.3';
 
 const SVG = 'http://www.w3.org/2000/svg';
 const NL = String.fromCharCode(10); // マウスを置いたときの文の改行
@@ -260,6 +262,40 @@ function breakdown(d, result, key) {
     h('p', { class: 'help', text: '余り日は、人が多すぎて出勤させずに置く日です。公休には数えません。' }));
 }
 
+// 集計表（4-3）：人ごとの各シフトの回数・公休・有給・出勤日数・労働時間（数え方は summary.js）
+function summaryTable(d) {
+  const cols = summaryColumns(d);
+  const sum = summarize(d);
+  const row = (name, r, cls) => h('tr', { class: cls }, h('th', { scope: 'row', class: 'sticky-col', text: name }), cols.map((c) => h('td', { text: String(c.value(r)), dataset: { key: c.key } })));
+  return h(
+    'div',
+    { class: 'table-wrap' },
+    h(
+      'table',
+      { class: 'summary-table', testid: 'summary-table' },
+      h('thead', {}, h('tr', {}, h('th', { scope: 'col', class: 'sticky-col', text: 'スタッフ' }), cols.map((c) => h('th', { scope: 'col', text: c.label })))),
+      h('tbody', {}, sum.rows.map((r) => row(r.name || '名前なし', r, null)), row('合計', sum.totals, 'is-total')),
+    ),
+  );
+}
+
+async function doExportExcel(btn) {
+  btn.disabled = true;
+  try {
+    const name = await exportExcel(app.data);
+    notify(`「${name}」を書き出しました（ブラウザのダウンロードの場所に入ります）。Excel で開けます。`, { kind: 'ok', testid: 'export-excel-notice' });
+  } catch {
+    notify('Excel のファイルを作れませんでした。ページを読み込み直して、もう一度ためしてください（CSV なら「その他の操作」から書き出せます）。', { kind: 'error', testid: 'export-excel-error' });
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function doExportCsv() {
+  const name = exportCsv(app.data);
+  notify(`「${name}」を書き出しました（ブラウザのダウンロードの場所に入ります）。`, { kind: 'ok', testid: 'export-csv-notice' });
+}
+
 // 元に戻す・やり直すの結果の知らせ
 function tellUndo(res, what) {
   if (!res) return;
@@ -312,8 +348,11 @@ export function renderStep6(el) {
             { class: 'more-ops-menu' },
             h('button', { type: 'button', class: 'btn', testid: 'restart', text: '途中から作り直す', disabled: Boolean(pv) || !d.settings.shifts.length, on: { click: openRestart } }),
             h('p', { class: 'help', text: pv ? '案を見ているあいだは使えません。' : '◯日までをいまのまま残して、あとの日を作り直します。' }),
+            h('button', { type: 'button', class: 'btn', testid: 'export-csv', text: 'CSV に出す', disabled: Boolean(pv), on: { click: doExportCsv } }),
+            h('p', { class: 'help', text: 'シフト表と集計表を、表計算のアプリで開ける形（CSV）で書き出します。' }),
           ),
         ),
+        h('button', { type: 'button', class: 'btn btn-primary', testid: 'export-excel', text: 'Excel に出す', disabled: Boolean(pv), on: { click: (e) => doExportExcel(e.currentTarget) } }),
       ),
       h('p', { class: 'help', testid: 'undo-status', text: pv ? '案を見ているあいだは、元に戻す・やり直すを止めています。' : u ? `「元に戻す」で、「${u.label}」の前に戻ります。` : '戻せる変更はまだありません（このページを開いてから変えたものを戻せます。読み直すと消えます）。' }),
       r ? h('p', { class: 'help', testid: 'redo-status', text: `「やり直す」で、「${r.label}」をもう一度します。` }) : null,
@@ -400,6 +439,13 @@ export function renderStep6(el) {
       grid.el,
     ),
     h('section', { class: 'card', testid: 'error-list-section' }, listBox),
+    h(
+      'section',
+      { class: 'card', testid: 'summary-section' },
+      h('h2', { text: '集計表' }),
+      h('p', { class: 'help', text: `人ごとの回数と日数です${pv ? '（いまは案の表で数えています）' : ''}。半休は出勤1日・有給0.5日・労働時間は手順1 の「半休の日の労働時間」で数えます。明けは出勤日数と労働時間に入れません。研修のシフトは出勤に数えます。空きのマスは数えません。` }),
+      summaryTable(view),
+    ),
     need
       ? h(
           'section',

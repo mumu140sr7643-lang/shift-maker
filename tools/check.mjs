@@ -18,6 +18,8 @@ import highsLoader from '../vendor/highs/highs.mjs';
 import { snapshotOf, diffSnapshots, applyChanges } from '../app/js/undo.js';
 import { prepareRepair, prepareRestart, solveRepair, tableChanges } from '../app/js/solver/repair.js';
 import { checkProposal } from './repair.mjs';
+import { summarize } from '../app/js/summary.js';
+import { csvCell, toCsv, shiftTableRows } from '../app/js/csv.js';
 
 const results = [];
 const check = (name, problems) => results.push({ name, problems });
@@ -675,6 +677,34 @@ const check = (name, problems) => results.push({ name, problems });
   if (outside && !blockers.some((it) => it.rule === 'notAssigned')) problems.push('残す日に担当外のシフトがあるのに、作る前に止めない');
   if (blockers.some((it) => it.rule === 'requestDiff' && !it.text.includes('いまのまま残すマス'))) problems.push('残すマスのぶつかりの文が「固定したマス」のまま');
   check('エラーを自動で直す・途中から作り直す（上限・残すマス・止める）', problems);
+}
+
+// 17. 集計表（summary.js）と CSV（csv.js）（4-3）
+{
+  const problems = [];
+  const d = M.emptyData(2026, 11, 'blank');
+  const zero = { full: 0, part: 0, all: 0 };
+  const E = M.newShift(d, { symbol: '早', name: '早', group: 'early', hours: 8, need: { ...zero } });
+  const T = M.newShift(d, { symbol: '研', name: '研修', group: 'early', hours: 6, training: true, counts: false, need: { ...zero } });
+  const N = M.newShift(d, { symbol: '夜', name: '夜', group: 'night', hours: 16, night: true, need: { ...zero } });
+  d.settings.shifts = [E, T, N];
+  d.settings.work.halfDayHours = 4;
+  const p = M.newStaff(d, { name: 'A', shifts: [E.id, T.id, N.id], offDays: 9, paidDays: 1 });
+  d.staff = [p];
+  const cells = { 1: { kind: 'shift', shift: E.id }, 2: { kind: 'shift', shift: T.id }, 3: { kind: 'shift', shift: N.id }, 4: { kind: 'ake' }, 5: { kind: 'half' }, 6: { kind: 'off' }, 7: { kind: 'paid' }, 8: { kind: 'spare' } };
+  d.month.table[p.id] = cells;
+  const r = summarize(d).rows[0];
+  const want = { workDays: 4, hours: 8 + 6 + 16 + 4, off: 1, paid: 1.5, half: 1, ake: 1, spare: 1, empty: 22 };
+  for (const [k, v] of Object.entries(want)) if (r[k] !== v) problems.push(`集計表の ${k} が ${r[k]}（${v} のはず。数え方の表 1 章）`);
+  if (r.shiftCounts[E.id] !== 1 || r.shiftCounts[T.id] !== 1 || r.shiftCounts[N.id] !== 1) problems.push('シフトごとの回数が合わない');
+  // CSV：式として読まれない形・カンマ・改行・二重引用符
+  const cases = [['=SUM(1)', "'=SUM(1)"], ['+1', "'+1"], ['-A', "'-A"], ['@x', "'@x"], ['\tx', "'\tx"], ['a,b', '"a,b"'], ['a"b', '"a""b"'], ['a\nb', '"a\nb"'], ['=a,b', `"'=a,b"`], ['ふつう', 'ふつう'], [12.5, '12.5'], [-1, '-1']];
+  for (const [inp, out] of cases) if (csvCell(inp) !== out) problems.push(`CSV の ${JSON.stringify(inp)} が ${JSON.stringify(csvCell(inp))}（${JSON.stringify(out)} のはず）`);
+  const text = toCsv([['a', 'b'], ['c', 'd']]);
+  if (text !== `${String.fromCharCode(0xfeff)}a,b\r\nc,d\r\n`) problems.push('CSV の先頭に BOM が無い、または行の終わりが CRLF でない');
+  const rows = shiftTableRows(d);
+  if (rows.length !== 3 || rows[1][0] !== 'A' || rows[1][1] !== '早' || rows[1][5] !== '半' || rows[2][0] !== '合計') problems.push('CSV のシフト表の形が合わない');
+  check('集計表（数え方の表 1 章）と CSV（BOM・式にならない・カンマ・改行）', problems);
 }
 
 // 10. 言葉の確かめ：一覧の言葉が、リポジトリのファイル・コミットの文に入っていないか

@@ -20,3 +20,4 @@ python -m http.server 8765
 ## 使っている部品
 
 - [HiGHS](https://highs.dev)（数理最適化。自動で作るで使う）：MIT ライセンス。`vendor/highs/` に、npm の `highs` 版 1.15.4（https://github.com/lovasoa/highs-js ）を手を加えずに置いています（`vendor/highs/LICENSE`）。
+- [ExcelJS](https://github.com/exceljs/exceljs)（Excel のファイルを作る。「Excel に出す」で使う）：MIT ライセンス。`vendor/exceljs/` に、npm の `exceljs` 版 4.4.0 の `dist/exceljs.bare.min.js` を手を加えずに置いています（`vendor/exceljs/LICENSE`）。

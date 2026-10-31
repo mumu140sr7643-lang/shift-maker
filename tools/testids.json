@@ -958,5 +958,33 @@
  {
   "id": "restart-failed",
   "find": "restart-failed"
+ },
+ {
+  "id": "export-excel",
+  "find": "export-excel"
+ },
+ {
+  "id": "export-csv",
+  "find": "export-csv"
+ },
+ {
+  "id": "export-excel-notice",
+  "find": "export-excel-notice"
+ },
+ {
+  "id": "export-csv-notice",
+  "find": "export-csv-notice"
+ },
+ {
+  "id": "export-excel-error",
+  "find": "export-excel-error"
+ },
+ {
+  "id": "summary-table",
+  "find": "summary-table"
+ },
+ {
+  "id": "summary-section",
+  "find": "summary-section"
  }
 ]

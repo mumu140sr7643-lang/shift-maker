@@ -20,6 +20,7 @@
   - 検査の画面（空の表の案内・6連勤以上の印と「悪くなりました」・一覧から動く・配置した人数・件数の帯と印が tools/count.mjs と同じ）
   - 決まりの強さ（手順1のチェックと1つの値・強さで件数が移る）と、希望だけで必ずエラーになるものの知らせ
   - 保存データが読めないとき、控えを残して知らせるか
+  - Excel に出す（マスの記号と色・集計表・件数が画面と同じ・式が入らない）・CSV に出す（BOM・式にならない・カンマと引用符）・手順6 の集計表・ファイルの名前
   - エラーを自動で直す（上限ごとの案・表で見る・反映・元に戻す・必ず変えるマスが多い上限）と、途中から作り直す（残す日は同じ・元に戻せる・残す日に担当外があれば止める）
   - 元に戻す・やり直す（マス・入れ替え・必要人数・自動で作った表。1文字も同じに戻る・読み直すと履歴は消える）と、同じ日の2人の入れ替え（ドラッグ・小窓・固定は入れ替えない）
   - 自動で作る（中止で前のまま・計算中はほかを押せない・進み具合・件数の帯が check.js と同じ・置きかえる前の控えから戻る・記録 20 回まで・別のタブで変えたら上書きしない・作る前の確かめ）
@@ -1467,6 +1468,172 @@ def scenario_repair(browser, base):
     ctx.close()
 
 
+def read_xlsx(path):
+    """Excel のファイル（xlsx）を、zip と XML で読む。返す：{シート名: {"A1": (値, 塗りの色 or None, 式があるか)}}"""
+    import zipfile
+    import xml.etree.ElementTree as ET
+    ns = {"m": "http://schemas.openxmlformats.org/spreadsheetml/2006/main", "r": "http://schemas.openxmlformats.org/officeDocument/2006/relationships"}
+    z = zipfile.ZipFile(path)
+    shared = []
+    if "xl/sharedStrings.xml" in z.namelist():
+        for si in ET.fromstring(z.read("xl/sharedStrings.xml")).findall("m:si", ns):
+            shared.append("".join(t.text or "" for t in si.iter(f"{{{ns['m']}}}t")))
+    styles = ET.fromstring(z.read("xl/styles.xml"))
+    fills = []
+    for f in styles.find("m:fills", ns).findall("m:fill", ns):
+        fg = f.find("m:patternFill/m:fgColor", ns)
+        fills.append(fg.get("rgb") if fg is not None else None)
+    xfs = [int(x.get("fillId", "0")) for x in styles.find("m:cellXfs", ns).findall("m:xf", ns)]
+    wb = ET.fromstring(z.read("xl/workbook.xml"))
+    rels = ET.fromstring(z.read("xl/_rels/workbook.xml.rels"))
+    target = {r.get("Id"): r.get("Target") for r in rels}
+    out = {}
+    for sh in wb.find("m:sheets", ns):
+        rid = sh.get(f"{{{ns['r']}}}id")
+        tpath = target[rid].lstrip("/")
+        tpath = tpath if tpath.startswith("xl/") else "xl/" + tpath
+        cells = {}
+        for c in ET.fromstring(z.read(tpath)).iter(f"{{{ns['m']}}}c"):
+            v = c.find("m:v", ns)
+            t = c.get("t")
+            if t == "s" and v is not None:
+                val = shared[int(v.text)]
+            elif t == "inlineStr":
+                val = "".join(x.text or "" for x in c.iter(f"{{{ns['m']}}}t"))
+            else:
+                val = v.text if v is not None else None
+            fill = fills[xfs[int(c.get("s", "0"))]] if c.get("s") else None
+            cells[c.get("r")] = (val, fill, c.find("m:f", ns) is not None)
+        out[sh.get("name")] = cells
+    return out
+
+
+def col_name(n):
+    s = ""
+    while n:
+        n, r = divmod(n - 1, 26)
+        s = chr(65 + r) + s
+    return s
+
+
+def scenario_export(browser, base):
+    """4-3：Excel に出す（記号・色・集計・件数・式にならない）・CSV に出す（BOM・式にならない・カンマと引用符）・画面の集計表"""
+    import io
+    import re
+    import calendar as cal
+    url = base + "/app/?seconds=6"
+    ctx, page, errors = fresh_page(browser, base, 1280, "light")
+    page.goto(url)
+    t(page, "sample-care").click()
+    t(page, "step-5").click()
+    t(page, "generate").click()
+    page.wait_for_selector('[data-testid="run-result"]', timeout=60000)
+    # 名前に式やカンマ・引用符を入れる
+    page.evaluate(
+        """() => {
+          const d = JSON.parse(localStorage.getItem('shift-maker:data'));
+          d.staff[0].name = '=1+1';
+          d.staff[1].name = 'a,"b"';
+          d.staff[2].name = '@x';
+          localStorage.setItem('shift-maker:data', JSON.stringify(d));
+        }"""
+    )
+    page.goto(url)
+    t(page, "step-6").click()
+    data = json.loads(stored(page))
+    year, month = data["month"]["year"], data["month"]["month"]
+    days = cal.monthrange(year, month)[1]
+    sym = {x["id"]: x["symbol"] for x in data["settings"]["shifts"]}
+    color = {x["id"]: x["color"].lstrip("#").upper() for x in data["settings"]["shifts"]}
+    rest = {"off": "休", "paid": "有", "half": "半", "ake": "明", "spare": "余"}
+    def symbol(v):
+        if not v:
+            return ""
+        return sym[v["shift"]] if v["kind"] == "shift" else rest[v["kind"]]
+    summary_rows = page.evaluate("() => [...document.querySelectorAll('[data-testid=summary-table] tbody tr')].map((tr) => [...tr.children].map((c) => c.textContent))")
+    ok(len(summary_rows) == len(data["staff"]) + 1 and summary_rows[-1][0] == "合計", "手順6 に集計表が出る（人ごとと合計）")
+
+    # Excel
+    with page.expect_download() as dl:
+        t(page, "export-excel").click()
+    d = dl.value
+    ok(re.fullmatch(rf"シフト表_{year}年{month}月_\d{{8}}-\d{{4}}\.xlsx", d.suggested_filename) is not None, "Excel のファイルの名前に月と日時が入る", d.suggested_filename)
+    path = OUT / "export-check.xlsx"
+    OUT.mkdir(parents=True, exist_ok=True)
+    d.save_as(str(path))
+    book = read_xlsx(str(path))
+    ok(list(book.keys()) == ["シフト表", "集計表", "件数"], "Excel のシートは シフト表・集計表・件数", str(list(book.keys())))
+    sheet = book["シフト表"]
+    bad_sym, bad_color, formulas = [], [], 0
+    for i, p in enumerate(data["staff"]):
+        row = 4 + i
+        if sheet.get(f"A{row}", (None,))[0] != p["name"]:
+            bad_sym.append(f"名前 {row}")
+        for day in range(1, days + 1):
+            v = data["month"]["table"].get(p["id"], {}).get(str(day))
+            val, fill, f = sheet.get(f"{col_name(day + 1)}{row}", ("", None, False))
+            formulas += 1 if f else 0
+            if (val or "") != symbol(v):
+                bad_sym.append(f"{p['name']} {day}日")
+            if v and v["kind"] == "shift" and (fill or "")[-6:] != color[v["shift"]]:
+                bad_color.append(f"{p['name']} {day}日")
+    ok(not bad_sym, "Excel のマスの記号と名前が、シフト表と同じ（式に見える名前も文字のまま）", ", ".join(bad_sym[:5]))
+    ok(not bad_color, "Excel のシフトのマスに、シフトの「Excel に出すときの色」が付く", ", ".join(bad_color[:5]))
+    ok(formulas == 0 and not any(c[2] for sh in book.values() for c in sh.values()), "Excel に式が1つも入らない")
+    summ = book["集計表"]
+    bad_sum = []
+    for i, r in enumerate(summary_rows):
+        for j, text in enumerate(r):
+            got = summ.get(f"{col_name(j + 1)}{i + 2}", (None,))[0]
+            if j == 0:
+                if got != text:
+                    bad_sum.append(f"{i}:{j}")
+            elif got is None or float(got) != float(text):
+                bad_sum.append(f"{i}:{j} {got}≠{text}")
+    ok(not bad_sum, "Excel の集計表が、画面の集計表と同じ数", ", ".join(bad_sum[:5]))
+    band = {k: t(page, f"band-{k}").get_attribute("data-count") for k in ["six", "hard", "soft", "spare", "short"]}
+    cnt = book["件数"]
+    got = {k: cnt.get(f"B{i}", (None,))[0] for i, k in enumerate(["six", "hard", "soft", "spare", "short"], start=1)}
+    ok(got == band, "Excel の件数が、件数の帯と同じ", f"{got} / {band}")
+
+    # CSV
+    page.locator('[data-testid="more-ops"] > summary').click()
+    with page.expect_download() as dl:
+        t(page, "export-csv").click()
+    d = dl.value
+    ok(re.fullmatch(rf"シフト表_{year}年{month}月_\d{{8}}-\d{{4}}\.csv", d.suggested_filename) is not None, "CSV のファイルの名前に月と日時が入る", d.suggested_filename)
+    cpath = OUT / "export-check.csv"
+    d.save_as(str(cpath))
+    raw = cpath.read_bytes()
+    ok(raw.startswith(b"\xef\xbb\xbf") and b"\r\n" in raw, "CSV は BOM 付きの UTF-8・行の終わりは CRLF")
+    import csv as csvmod
+    rows = list(csvmod.reader(io.StringIO(raw.decode("utf-8-sig"), newline="")))
+    ok(rows[0][0] == "スタッフ" and rows[-1][0] == "合計" and len(rows) == len(data["staff"]) + 2, "CSV の形（見出し・人ごと・合計）")
+    ok(rows[1][0] == "'=1+1" and rows[2][0] == 'a,"b"' and rows[3][0] == "'@x", "CSV で、= @ で始まる名前は ' を付け、カンマと引用符の名前も崩れない", str([rows[1][0], rows[2][0], rows[3][0]]))
+    bad = []
+    for i, p in enumerate(data["staff"]):
+        for day in range(1, days + 1):
+            if rows[i + 1][day] != symbol(data["month"]["table"].get(p["id"], {}).get(str(day))):
+                bad.append(f"{i}:{day}")
+        if [x for x in rows[i + 1][days + 1:]] != summary_rows[i][1:]:
+            bad.append(f"集計 {i}")
+    ok(not bad, "CSV のマスの記号と集計が、画面と同じ", ", ".join(bad[:5]))
+    ok(not errors, "エラー0 書き出し", " / ".join(errors[:3]))
+    ctx.close()
+
+    # スマホの幅でも押せる
+    ctx, page, errors = fresh_page(browser, base, 375, "dark")
+    page.goto(url)
+    t(page, "sample-restaurant").click()
+    go(page, 6, 375)
+    with page.expect_download() as dl:
+        t(page, "export-excel").click()
+    ok(dl.value.suggested_filename.endswith(".xlsx"), "スマホの幅でも Excel に出せる")
+    look(page, "dark 375 手順6 集計表", "step6-summary-dark-375")
+    ok(not errors, "エラー0 書き出し（スマホ）", " / ".join(errors[:3]))
+    ctx.close()
+
+
 def main():
     with Server() as srv, sync_playwright() as pw:
         base = f"http://127.0.0.1:{srv.port}"
@@ -1493,6 +1660,7 @@ def main():
         scenario_generate(browser, base)
         scenario_undo(browser, base)
         scenario_repair(browser, base)
+        scenario_export(browser, base)
         browser.close()
     print(json.dumps({"ブラウザ": CHANNEL or "chromium", "合格": len(results["pass"]), "不合格": results["fail"]}, ensure_ascii=False, indent=2))
     sys.exit(1 if results["fail"] else 0)

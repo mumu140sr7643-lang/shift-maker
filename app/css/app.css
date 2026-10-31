@@ -671,6 +671,13 @@ button.band-item { cursor: pointer; }
 .repair-item h3 { margin: 0 0 4px; }
 .repair-item p { margin: 0 0 6px; }
 
+/* 手順6 集計表 */
+.summary-table { border-collapse: collapse; font-size: 0.9rem; }
+.summary-table th, .summary-table td { border: 1px solid var(--border); padding: 4px 8px; text-align: right; white-space: nowrap; }
+.summary-table thead th { background: var(--surface-2); text-align: center; }
+.summary-table th[scope="row"] { text-align: left; background: var(--surface); }
+.summary-table tr.is-total th, .summary-table tr.is-total td { font-weight: 700; background: var(--surface-2); }
+
 /* 手順5 自動で作る */
 .modes { display: grid; gap: 8px; }
 .mode { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); cursor: pointer; }
