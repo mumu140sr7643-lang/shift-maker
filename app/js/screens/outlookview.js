@@ -3,14 +3,14 @@
 // 5-2：人手の余り・不足の表（最大流で「埋められる」）と、月の合計の人手（区分ごと）。
 // 5-3：どう作っても最低◯件の見込みと、直し方のボタン（外すと本当に減るものだけ）。
 // 「詳しい機能」は、開いたときに数える（開いているかは、画面を作り直しても残す）。
-import { h, append } from '../dom.js?v=6.1';
-import { app } from '../state.js?v=6.1';
-import { record } from '../history.js?v=6.1';
-import { notify } from '../dialog.js?v=6.1';
-import { RULE_BY_ID } from '../rules.js?v=6.1';
-import { monthDays } from '../model.js?v=6.1';
-import { weekdayOf, WEEKDAY_LABELS } from '../calendar.js?v=6.1';
-import { GROUPS, countedShift, groupOf, dayMargins, skillMargins, staffingTable, monthTotals, lowerBound, fixesFor, applyFix } from '../outlook.js?v=6.1';
+import { h, append } from '../dom.js?v=6.2';
+import { app } from '../state.js?v=6.2';
+import { record } from '../history.js?v=6.2';
+import { notify } from '../dialog.js?v=6.2';
+import { RULE_BY_ID } from '../rules.js?v=6.2';
+import { monthDays } from '../model.js?v=6.2';
+import { weekdayOf, WEEKDAY_LABELS } from '../calendar.js?v=6.2';
+import { GROUPS, countedShift, groupOf, dayMargins, skillMargins, staffingTable, monthTotals, lowerBound, fixesFor, applyFix } from '../outlook.js?v=6.2';
 
 export function marginClass(m) {
   return m < 0 ? 'mg-neg' : m === 0 ? 'mg-zero' : m === 1 ? 'mg-one' : 'mg-ok';

@@ -1,6 +1,6 @@
 // 決まりの一覧と、マスの状態ごとの性質（docs/数え方の表.md の 1 章・2 章）。
 // 検査・画面・手引き・自動で作る（v3）は、名前も数え方も、すべてここから引く。画面には触らない。
-import { shiftById } from './model.js?v=6.1';
+import { shiftById } from './model.js?v=6.2';
 
 export const STRENGTH_NAMES = { hard: '絶対', soft: 'できれば', off: 'なし', always: 'いつも数える' };
 

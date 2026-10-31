@@ -1,7 +1,7 @@
 // 集計表（4-3。説明書 2 節 手順6）：人ごとの各シフトの回数・公休・有給・出勤日数・労働時間。画面には触らない。node からも使う。
 // 数え方は docs/数え方の表.md の 1 章：半休は出勤 1 日・労働時間は「半休の日の労働時間」・有給 0.5 日。
 // 明けは出勤日数 0・労働時間 0。研修のシフトも出勤（シフトの時間）。余り日・公休・有給は出勤 0。空きは数えない。
-import { monthDays, cellOf, shiftById } from './model.js?v=6.1';
+import { monthDays, cellOf, shiftById } from './model.js?v=6.2';
 
 const round1 = (x) => Math.round(x * 10) / 10;
 

@@ -1,13 +1,13 @@
 // ファイルから取り込む。取り込む前に中身を全部確かめ、正しくなければ断って、いまのデータのままにする。
-import { h } from '../dom.js?v=6.1';
-import { app, replaceData } from '../state.js?v=6.1';
-import { parseData } from '../storage.js?v=6.1';
-import { importProblems } from '../model.js?v=6.1';
-import { takeBackup, backupLines } from '../backup.js?v=6.1';
-import { SAMPLE_KINDS } from '../samples.js?v=6.1';
-import { monthLabel } from '../calendar.js?v=6.1';
-import { exportData } from '../files.js?v=6.1';
-import { ask, notify } from '../dialog.js?v=6.1';
+import { h } from '../dom.js?v=6.2';
+import { app, replaceData } from '../state.js?v=6.2';
+import { parseData } from '../storage.js?v=6.2';
+import { importProblems } from '../model.js?v=6.2';
+import { takeBackup, backupLines } from '../backup.js?v=6.2';
+import { SAMPLE_KINDS } from '../samples.js?v=6.2';
+import { monthLabel } from '../calendar.js?v=6.2';
+import { exportData } from '../files.js?v=6.2';
+import { ask, notify } from '../dialog.js?v=6.2';
 
 export const MAX_IMPORT_BYTES = 5 * 1024 * 1024;
 

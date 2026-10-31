@@ -66,6 +66,7 @@
 | `app/js/screens/outlookview.js` | 手順5 の「詳しい機能：作る前の見込み」（5-1 は日ごとの余裕） |
 | `docs/じっくり作る案.md` | じっくり作る（v6）の作り方の案（第2版。確かめ役と決めた）。何通りか同時（候補 あ・い・う・い2・え）・1分の答えを保険に・仕上げの入れ替え・中止と Worker の数・測り方と決め方 A〜I |
 | `app/js/solver/finish.js` | 仕上げの入れ替え（6-1）：`finishTable`（同じ日の出勤どうし・2人×2日のたすき掛け。check.js で数えて、isImproved で改善かつ並べる順で良いときだけ入れる）・`moveAllowed`・`applyMove`。乱数は使わない。画面には触らない。node からも使う |
+| `app/js/solver/careful.js` | じっくり作る（6-2）：`startCareful`（まとめ役。Worker を作る関数を渡す。いちばん良い答えを並べる順で選ぶ・ここまでで終える・中止・時間の見張り）・`runCandidate`（Worker の側。候補 あ・い・う・い2 と仕上げ）・`workerCount`・`timePlan`。画面には触らない。node からも使う（worker_threads は `tools/careful-worker.mjs`） |
 | `vendor/highs/` | HiGHS（MIT。npm の `highs` 版 1.15.4 を手を加えずに置いている。`README.md`・`LICENSE`） |
 
 ## 確かめのコマンド（送る前に毎回、全部通す）
@@ -90,6 +91,7 @@ python tools/ui_check.py --channel msedge
   - `node tools/outlook-brute.mjs [--cases 200]`：見込みと説明（v5）の数え方を、とても小さな月の総当たりで確かめる（5-2：最大流、5-3：最低件数 ≦ いちばん少ない件数）。`node tools/outlook-check.mjs [--stress 200]`：最低件数 ≦ 作った表の件数。
   - `node tools/repair-bench.mjs [--jobs 8]`：見本3つ × 12か月と作り物 12通りを1分で作り、直すを当てて、案が出る割合・件数の減り方・秒を数える。
   - 仕上げの入れ替え（v6）：`node tools/finish.mjs 保存したファイル.json [--seconds 25] [--checks 5000] [--out フォルダ]`（前後の件数・入れた入れ替え・確かめ `verifyFinish`）。`node tools/finish-stress.mjs [--months 60] [--solved 12]`（乱数の手直しの月と作った月で、変えないもの・動かさないマス・1つずつの改善・6連勤以上・同じ答え）。`node tools/finish-bench.mjs [--jobs 8] [--runs 3]`（測り B：見本3つ × 12か月と作り物 12通りの 1分の答えを仕上げる。`--reuse` で1分の答えを使い直す）。
+  - じっくり作る（v6 の 6-2）：`node tools/careful.mjs 保存したファイル.json [--seconds 600] [--workers 4] [--quick 60] [--seed 1] [--out フォルダ]`（候補ごとの結果・全部の答えと時刻・選んだ表）。`node tools/careful-bench.mjs [--only careful,quick,few,summary] [--seconds 600] [--jobs 2]`（測り C・E・F）。`node tools/careful-pick.mjs`（測り D：保存した答えで、候補の組み合わせを変えて選び直す）。`node tools/careful-memory.mjs [--staff 50]`（測り G：50人×31日の候補ごとのメモリ。node の分を引いた分と、HiGHS の WebAssembly のメモリのいちばん大きいとき）。`node tools/tighten-check.mjs --first [--stress 120]`（測り F の足し：段を早めに止めて締め直しを起こし、締め直した直後の量 = その時点の表の検査の量 か）。`node tools/solve.mjs ファイル.json --exact`（候補 う の式で、段の量と検査の量を比べる）。測りの結果には、測ったコミットの番号を書く（`tools/lib.mjs` の `gitCommit`）。
   - 変えないものの確かめ（v6 の測り A）：`node tools/solver-same.mjs --root 前の版のフォルダ --out tools/out/same-old` と `--out tools/out/same-new` を書き出して `tools/compare.mjs` で比べる（1分で作る・直す 10/25/50・途中から作り直すを、調べる数 50・種 1〜3 で）。
   - `node tools/solve-bench.mjs --sizes [--time 60]`（8・15・25・50人 × 28・30・31日の速さ）／`--leader`（責任者の軽い式の試し）／`--exact`（段の量と check.js の量を、作り物の月で比べる）。結果は `tools/out/bench-*.json`。
 
@@ -154,7 +156,7 @@ python tools/ui_check.py --channel msedge
 | v3 自動で作る（1分） | `v3`（v2 の上） | 3-1 中身：`b5bf2b8`（2026-10-31 合格。版の表示 3.1）／3-2 手順5の画面：`5b0e9d3`（2026-10-31 合格。版の表示 3.2）／3-3 見本と1分の設定：`5555871`（2026-10-31 合格。版の表示 3.3。v3 全体の合格） | 公開しない。最後に利用者が決める |
 | v4 手直しの道具 | `v4`（v3 の上） | 4-1 元に戻す・入れ替え：`e54279d`（2026-10-31 合格。版の表示 4.1）／4-2 直す・途中から：`24b9d31`（2026-10-31 合格。版の表示 4.2）／4-3 Excel・CSV・集計表：`e287d89`（2026-10-31 合格。版の表示 4.3。v4 全体の合格） | 公開しない。最後に利用者が決める |
 | v5 見込みと説明 | `v5`（v4 の上） | 5-1 あと何人休めるか：`d281381`（2026-10-31 合格。版の表示 5.1）／5-2 人手の表：`18c19ab`（2026-10-31 合格。版の表示 5.2）／5-3 最低件数・理由：`59660b5`（2026-10-31 合格。版の表示 5.3。v5 全体の合格） | 公開しない。最後に利用者が決める |
-| v6 じっくり作る | `v6`（v5 の上） | 案：`47fb699`（第1版。確かめ役が A〜D を足して作り始めてよいとした）／6-1 仕上げ：（まだ） | 公開しない。最後に利用者が決める |
+| v6 じっくり作る | `v6`（v5 の上） | 案：`47fb699`（第1版。確かめ役が A〜D を足して作り始めてよいとした）／6-1 仕上げ：`6c99306`（2026-10-31 合格。版の表示 6.1）／6-2 じっくり作る：（まだ） | 公開しない。最後に利用者が決める |
 
 ## 決めたことの記録
 

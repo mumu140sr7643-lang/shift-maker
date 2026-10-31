@@ -3,8 +3,8 @@
 //   保存すると、データと同じ保存場所を大きく使い、別のタブで変えたデータとも合わなくなるため。
 //   自動で作る前の表は、控え（「保存と控え」）からも戻せる。
 // データをまるごと置きかえたとき（見本・取り込み・控えから戻す・別のタブで変えた）と、月を切り替えたときは消す。
-import { app, commit, rerender, onReplaceData } from './state.js?v=6.1';
-import { snapshotOf, diffSnapshots, applyChanges } from './undo.js?v=6.1';
+import { app, commit, rerender, onReplaceData } from './state.js?v=6.2';
+import { snapshotOf, diffSnapshots, applyChanges } from './undo.js?v=6.2';
 
 export const MAX_HISTORY = 100;
 let undoStack = [];

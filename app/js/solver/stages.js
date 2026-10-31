@@ -1,6 +1,6 @@
 // 段階的に解く（docs/自動で作る案.md の 4・5 章）。HiGHS を読み込む関数を渡せば、ブラウザでも node でも同じに動く。
-import { buildModel } from './build.js?v=6.1';
-import { solveConflicts } from '../check.js?v=6.1';
+import { buildModel } from './build.js?v=6.2';
+import { solveConflicts } from '../check.js?v=6.2';
 
 // HiGHS の答えの状態の番号
 const OPTIMAL = 7;
@@ -66,11 +66,13 @@ function runLp(highs, text, options, start) {
 export async function solveStaged(data, opts) {
   // maxStages・presolve・presolveRuleOff・warmStart は確かめの道具だけが変える（はじめの段だけ解く・前処理の不具合を調べる）
   // keepCurrent・changeLimit はエラーを自動で直す（repair.js）だけが使う
-  const { loadHighs, timeLimit = null, nodeLimit = null, seed = 1, leaderWeight = 0, onProgress = () => {}, shouldStop = () => false, maxStages = Infinity, presolve = 'on', presolveRuleOff = PRESOLVE_RULE_OFF, warmStart = WARM_START, softWarmStart = SOFT_WARM_START, softOptions = SOFT_OPTIONS, keepCurrent = false, changeLimit = null } = opts;
+  // exact・tighten はじっくり作る（careful.js）だけが使う（exact は候補 う の式。tighten は時間切れの「絶対」の段の量の締め直し）
+  // hardOptions は確かめの道具（tools/tighten-check.mjs）だけが使う（「できれば」より前の段に足す HiGHS の設定。段を早めに止めて、締め直しを起こすため）
+  const { loadHighs, timeLimit = null, nodeLimit = null, seed = 1, leaderWeight = 0, onProgress = () => {}, shouldStop = () => false, maxStages = Infinity, presolve = 'on', presolveRuleOff = PRESOLVE_RULE_OFF, warmStart = WARM_START, softWarmStart = SOFT_WARM_START, softOptions = SOFT_OPTIONS, hardOptions = {}, keepCurrent = false, changeLimit = null, exact = false, tighten = false } = opts;
   const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
   const conflicts = solveConflicts(data);
   if (conflicts.length) return { ok: false, reason: 'conflict', conflicts, stages: [] };
-  const model = buildModel(data, { leaderWeight, keepCurrent, changeLimit });
+  const model = buildModel(data, { leaderWeight, keepCurrent, changeLimit, exact });
   const records = [];
   const bounds = [];
   let last = null;
@@ -83,6 +85,7 @@ export async function solveStaged(data, opts) {
     if (timeLimit) options.time_limit = budgetFor(i, model.stages.length, timeLimit, (now() - t0) / 1000);
     if (nodeLimit) options.mip_max_nodes = nodeLimit;
     if (st.key === 'soft') Object.assign(options, softOptions);
+    else Object.assign(options, hardOptions);
     onProgress({ stage: i + 1, count: model.stages.length, name: st.name, phase: 'start', seconds: (now() - t0) / 1000 });
     const s0 = now();
     let res;
@@ -120,9 +123,33 @@ export async function solveStaged(data, opts) {
       records.push({ key: st.key, name: st.name, status: 'none', seconds, value: null, code: res.code, retried });
       return { ok: false, reason: INFEASIBLE.has(res.code) ? 'infeasible' : 'no-answer', stages: records, size: model.size };
     }
+    // 締め直し：「絶対」の段が言い切れずに終わったら、2択の変数をその答えのまま決めて、この段の量だけを解き直す（すぐ解ける）。
+    // 違反の量の数（z）が実際より大きいまま次の段の上限になるのを防ぐ。表は変わらない。
+    // 記録（tightened）は解き直したら毎回残す（applied：量が減ったので入れた。amounts：解き直した答えの、この段の決まりごとの量。
+    // 測り F の足しで、その時点の表を check.js で数えた量と比べる）
+    let tightened = null;
+    if (tighten && st.key !== 'soft' && status !== 'solved' && !shouldStop()) {
+      try {
+        const again = { ...options, time_limit: Math.max(1, Math.min(10, timeLimit ? timeLimit - (now() - t0) / 1000 : 10)) };
+        delete again.mip_max_nodes;
+        for (const k of Object.keys(hardOptions)) delete again[k];
+        const fixed = runLp(await loadHighs(), model.lp(st.objective, bounds, last), again, null);
+        const v = fixed.values ? valueOf(st.objective, fixed.values) : null;
+        if (v !== null) {
+          const applied = v < value - 1e-6;
+          tightened = { from: Math.round(value * 1000) / 1000, to: Math.round((applied ? v : value) * 1000) / 1000, applied, amounts: Object.fromEntries(st.rules.map((r) => [r, model.amountOf(r, fixed.values)])) };
+          if (applied) {
+            last = fixed.values;
+            value = v;
+          }
+        }
+      } catch {
+        // 締め直せなくても、締め直す前の量のまま進む
+      }
+    }
     bounds.push({ objective: st.objective, max: value });
     const suspect = after !== null && before !== null && after > before + 1e-6 && res.code === OPTIMAL;
-    records.push({ key: st.key, name: st.name, rules: st.rules, status, seconds, value: Math.round(value * 1000) / 1000, code: res.code, retried, ...(suspect ? { suspect } : {}) });
+    records.push({ key: st.key, name: st.name, rules: st.rules, status, seconds, value: Math.round(value * 1000) / 1000, code: res.code, retried, ...(suspect ? { suspect } : {}), ...(tightened ? { tightened } : {}) });
     onProgress({ stage: i + 1, count: model.stages.length, name: st.name, phase: 'done', seconds: (now() - t0) / 1000, table: model.readTable(last) });
   }
   const amounts = {};

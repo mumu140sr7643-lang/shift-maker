@@ -1,22 +1,26 @@
-// 手順5 自動で作る：1分で作る（おためし）。計算は裏方（solver/worker.js の Web Worker）で行うので、画面は固まらない。
+// 手順5 自動で作る：1分で作る（おためし）・じっくり作る（本番）。計算は裏方（solver/worker.js の Web Worker）で行うので、画面は固まらない。
 // 計算は写しで行い、終わってから、そのあいだにデータが変わっていないことを確かめて本物の表に入れる。
-import { h, append } from '../dom.js?v=6.1';
-import { app, rerender, goStep } from '../state.js?v=6.1';
-import { record, undo, nextUndo } from '../history.js?v=6.1';
-import { canonicalJSON, clone, applyGenerated } from '../model.js?v=6.1';
-import { checkTable, solveConflicts, unavoidableErrors } from '../check.js?v=6.1';
-import { RULE_BY_ID } from '../rules.js?v=6.1';
-import { ask, notify } from '../dialog.js?v=6.1';
-import { takeBackup, backupLines } from '../backup.js?v=6.1';
-import { timeLabel } from '../calendar.js?v=6.1';
-import { screenTitle } from './common.js?v=6.1';
-import { countBand } from './checkview.js?v=6.1';
-import { startSolving, isSolving, quickSeconds } from './solving.js?v=6.1';
-import { outlookCard } from './outlookview.js?v=6.1';
-import { lowerBound } from '../outlook.js?v=6.1';
+import { h, append } from '../dom.js?v=6.2';
+import { app, rerender, goStep } from '../state.js?v=6.2';
+import { record, undo, nextUndo } from '../history.js?v=6.2';
+import { canonicalJSON, clone, applyGenerated } from '../model.js?v=6.2';
+import { checkTable, solveConflicts, unavoidableErrors } from '../check.js?v=6.2';
+import { RULE_BY_ID } from '../rules.js?v=6.2';
+import { ask, notify } from '../dialog.js?v=6.2';
+import { takeBackup, backupLines } from '../backup.js?v=6.2';
+import { timeLabel } from '../calendar.js?v=6.2';
+import { screenTitle } from './common.js?v=6.2';
+import { countBand } from './checkview.js?v=6.2';
+import { startSolving, startCarefulSolving, isSolving, quickSeconds, carefulSeconds, carefulWorkers } from './solving.js?v=6.2';
+import { candidateName } from '../solver/careful.js?v=6.2';
+import { outlookCard } from './outlookview.js?v=6.2';
+import { lowerBound, reachedLowerBound } from '../outlook.js?v=6.2';
 
 // 元に戻すの履歴での呼び名（手順6 の「元に戻す」にも出る）
 const GENERATED_LABEL = '自動で作った表';
+
+// 選んだ作り方（画面を作り直しても残す。はじめは 1分で作る）
+let mode = 'quick';
 
 const hasCells = (d) => Object.values(d.month.table).some((row) => Object.keys(row).length > 0);
 const ruleLine = (it) => `${RULE_BY_ID[it.rule]?.name ?? it.rule}：${it.text}`;
@@ -29,13 +33,68 @@ function basicProblems(d) {
   return out;
 }
 
-function failText(reason, conflicts) {
+function failText(reason, conflicts, careful = false) {
   if (reason === 'conflict') return `このままでは作れません。${conflicts.slice(0, 3).map(ruleLine).join(' ／ ')}。手順5 の「作る前の確かめ」を見て直してください。シフト表は前のままです。`;
   if (reason === 'infeasible') return '条件どうしがぶつかって作れませんでした。シフト表は前のままです。手順4 の希望と、手順6 で固定したマスを見直してください。';
-  return '時間内に作れませんでした。シフト表は前のままです。スタッフの数や希望の数を見直してください（このあとの版の「じっくり作る」では、もっと時間をかけて作れます）。';
+  if (careful) return '時間内に作れませんでした。シフト表は前のままです。スタッフの数や希望の数を見直してください。';
+  return '時間内に作れませんでした。シフト表は前のままです。スタッフの数や希望の数を見直してください（「じっくり作る」なら、もっと時間をかけて作れます）。';
+}
+
+// 作った表を入れる（1分・じっくり で同じ流れ）。計算のあいだに別のタブでデータが変わっていたら入れない
+function applyRun(startText, table, run) {
+  if (canonicalJSON(app.data) !== startText) {
+    notify('計算のあいだに、別のタブ（画面）でデータが変わりました。そちらの内容を守るため、作った表は入れませんでした。もう一度「シフトを作る」を押してください。', { kind: 'warn', testid: 'run-changed' });
+    rerender();
+    return;
+  }
+  record(GENERATED_LABEL, (x) => {
+    applyGenerated(x, table, run);
+    run.totals = checkTable(x).totals;
+  }, { render: true });
+  notify('シフト表を作りました。下の「作った結果」と、手順6 シフト表で見られます。', { kind: 'ok', testid: 'run-done' });
+}
+
+function runCareful(d) {
+  const startText = canonicalJSON(d);
+  const seed = (d.month.runs.length % 1000) + 1;
+  startCarefulSolving({
+    data: clone(d),
+    seed,
+    onResult: (r) => {
+      if (!r.ok) {
+        notify(failText(r.reason, r.conflicts, true), { kind: 'error', testid: 'run-failed' });
+        rerender();
+        return;
+      }
+      const stagesOf = (c) => (c.stages ?? []).map((s) => ({ key: s.key, name: s.name, status: s.status, seconds: s.seconds }));
+      const picked = r.candidates.find((c) => c.role === r.picked.role);
+      const fromFinish = r.answers.find((a) => a.label === 'finish' && a.role === r.picked.role);
+      applyRun(startText, r.table, {
+        at: new Date().toISOString(),
+        mode: 'careful',
+        limit: carefulSeconds(),
+        quickLimit: quickSeconds(),
+        seed,
+        seconds: r.seconds,
+        how: r.how,
+        count: r.count,
+        finished: r.finished,
+        picked: r.picked,
+        quickTotals: r.quick?.totals ?? null,
+        finishMoves: r.finishMoves,
+        finishFrom: r.picked.label === 'finish' && fromFinish ? (r.answers.filter((a) => a.role === r.picked.role && a.label !== 'finish').pop()?.totals ?? null) : null,
+        stages: picked ? stagesOf(picked) : [],
+        candidates: r.candidates.map((c) => ({ role: c.role, name: c.name, totals: c.totals, label: c.label, at: c.at, lost: c.lost, reason: c.reason, rounds: c.rounds, moves: c.moves, stages: stagesOf(c) })),
+      });
+    },
+  });
 }
 
 function run(d) {
+  if (mode === 'careful') {
+    runCareful(d);
+    return;
+  }
   const seconds = quickSeconds();
   const startText = canonicalJSON(d);
   const seed = (d.month.runs.length % 1000) + 1;
@@ -49,13 +108,7 @@ function run(d) {
         rerender();
         return;
       }
-      // 計算のあいだに、別のタブ（画面）でデータが変わっていたら、そちらを守って入れない
-      if (canonicalJSON(app.data) !== startText) {
-        notify('計算のあいだに、別のタブ（画面）でデータが変わりました。そちらの内容を守るため、作った表は入れませんでした。もう一度「シフトを作る」を押してください。', { kind: 'warn', testid: 'run-changed' });
-        rerender();
-        return;
-      }
-      const run = {
+      applyRun(startText, r.table, {
         at: new Date().toISOString(),
         mode: 'quick',
         limit: seconds,
@@ -63,12 +116,7 @@ function run(d) {
         seconds: r.seconds,
         finished: r.stages.length > 0 && r.stages.every((s) => s.status === 'solved'),
         stages: r.stages.map((s) => ({ key: s.key, name: s.name, status: s.status, seconds: s.seconds })),
-      };
-      record(GENERATED_LABEL, (x) => {
-        applyGenerated(x, r.table, run);
-        run.totals = checkTable(x).totals;
-      }, { render: true });
-      notify('シフト表を作りました。下の「作った結果」と、手順6 シフト表で見られます。', { kind: 'ok', testid: 'run-done' });
+      });
     },
   });
 }
@@ -111,7 +159,20 @@ function modeCard() {
     h(
       'label',
       { class: disabled ? 'mode is-disabled' : 'mode' },
-      h('input', { type: 'radio', name: 'make-mode', value, checked: !disabled, disabled, testid }),
+      h('input', {
+        type: 'radio',
+        name: 'make-mode',
+        value,
+        checked: mode === value,
+        disabled,
+        testid,
+        on: {
+          change: () => {
+            mode = value;
+            rerender();
+          },
+        },
+      }),
       h('span', { class: 'mode-text' }, h('span', { class: 'mode-name', text: label }), h('span', { class: 'help', text: help })),
     );
   return h(
@@ -122,7 +183,7 @@ function modeCard() {
       'div',
       { class: 'modes', role: 'radiogroup', 'aria-label': '作り方' },
       option('quick', '1分で作る（おためし）', '1分ほどで作ります。まず形を見たいときに。', false, 'mode-quick'),
-      option('careful', 'じっくり作る（本番。最大10分ほど）', '準備中です。このあとの版で使えるようになります。', true, 'mode-careful'),
+      option('careful', 'じっくり作る（本番。最大10分ほど）', '最大10分ほどかかります。いちばん良い答えを、何通りかで探します。', false, 'mode-careful'),
     ),
   );
 }
@@ -171,7 +232,9 @@ function makeCard(d, canMake) {
     h('h2', { text: '3. 作る' }),
     h('button', { type: 'button', class: 'btn btn-primary btn-big', text: 'シフトを作る', testid: 'generate', disabled: !canMake, on: { click: start } }),
     canMake ? null : h('p', { class: 'help why', testid: 'generate-why', text: '上の「2. 作る前の確かめ」を直すと押せます。' }),
-    h('p', { class: 'help', text: `${quickSeconds()}秒ほどかかります。計算のあいだは、ほかの重いアプリを閉じてください（時間で区切って作るので、パソコンが混んでいると、答えが悪くなることがあります）。` }),
+    mode === 'careful'
+      ? h('p', { class: 'help', testid: 'make-help', text: `最大${Math.ceil(carefulSeconds() / 60)}分ほどかかります（このパソコンでは${carefulWorkers() > 1 ? `${carefulWorkers()}通り同時に` : '1通りずつ'}探します）。はじめの1分で「1分で作る」と同じ答えを作り、それより良い答えだけを選びます。計算のあいだは、ほかの重いアプリを閉じてください。` })
+      : h('p', { class: 'help', testid: 'make-help', text: `${quickSeconds()}秒ほどかかります。計算のあいだは、ほかの重いアプリを閉じてください（時間で区切って作るので、パソコンが混んでいると、答えが悪くなることがあります）。` }),
     hasCells(d) ? h('p', { class: 'help', text: 'いまのシフト表は、作った表に置きかわります。置きかえる前に控えを残すので、「保存と控え」から戻せます。' }) : null,
   );
 }
@@ -180,8 +243,26 @@ function makeCard(d, canMake) {
 function reached(d, res) {
   if (res.tableEmpty) return null;
   const lb = lowerBound(d);
-  if (res.totals.sixPlus !== lb.six || res.totals.hard !== lb.hard) return null;
+  if (!reachedLowerBound(res, lb)) return null;
   return h('p', { class: 'help', testid: 'lb-reached', text: `見込みの最低件数（6連勤以上 ${lb.six}件・絶対 ${lb.hard}件）に届いています。希望と固定を変えないかぎり、これ以上は減らせません。` });
+}
+
+// じっくり作るの結果：1分の答えからどう変わったか・仕上げで減らした数
+function carefulLines(r) {
+  const q = r.quickTotals;
+  const t = r.totals;
+  const lines = [];
+  if (r.picked?.label === 'quick') lines.push(h('p', { testid: 'run-quick-best', text: 'じっくり探しても、1分の答えより良い答えはありませんでした（1分の答えを使っています）。' }));
+  else if (q && t) {
+    const part = (name, a, b) => `${name} ${a}件 → ${b}件`;
+    lines.push(h('p', { testid: 'run-vs-quick', text: `1分の答えから変わりました（${part('6連勤以上', q.sixPlus, t.sixPlus)}・${part('絶対', q.hard, t.hard)}・${part('できれば', q.soft, t.soft)}）。選んだ答え：${candidateName(r.picked?.role)}。` }));
+  }
+  if (r.picked?.label === 'finish' && r.finishFrom && t) {
+    const sum = (x) => x.sixPlus + x.hard + x.soft;
+    const gain = sum(r.finishFrom) - sum(t);
+    lines.push(h('p', { testid: 'run-finish', text: gain > 0 ? `仕上げの入れ替えで、さらに${gain}件減らしました。` : '仕上げの入れ替えで、さらに良くしました。' }));
+  }
+  return lines;
 }
 
 function resultCard(d) {
@@ -203,12 +284,16 @@ function resultCard(d) {
       ].join('') || '時間内に見つけたいちばん良い答えです。';
   const res = checkTable(d);
   const edited = Object.values(d.month.marks).some((row) => Object.values(row).some((m) => m.edited));
+  const secs = Math.round(Number(r.seconds) || 0);
+  const careful = r.mode === 'careful';
+  const how = careful ? `「じっくり作る」で作りました（${secs}秒・${Number(r.count) || 1}通り）。${r.how === 'early' ? `途中で終えました（${secs}秒）。` : ''}` : `${r.mode === 'restart' ? `「途中から作り直す」（${Number(r.fromDay) || ''}日から）` : '「1分で作る」'}で作りました（${secs}秒）。`;
   return h(
     'section',
-    { class: 'card', testid: 'run-result', dataset: { finished: String(Boolean(r.finished)) } },
+    { class: 'card', testid: 'run-result', dataset: { finished: String(Boolean(r.finished)), mode: careful ? 'careful' : 'quick' } },
     h('h2', { text: '作った結果' }),
-    h('p', { testid: 'run-when', text: `${when}${r.mode === 'restart' ? `「途中から作り直す」（${Number(r.fromDay) || ''}日から）` : '「1分で作る」'}で作りました（${Math.round(Number(r.seconds) || 0)}秒）。` }),
-    h('p', { testid: 'run-status', text: status }),
+    h('p', { testid: 'run-when', text: `${when}${how}` }),
+    h('p', { testid: 'run-status', text: careful && !r.finished ? '時間内に見つけたいちばん良い答えです（何通りかで探して、決めた順番でいちばん良いものを選びました）。' : status }),
+    careful ? carefulLines(r) : null,
     h('h3', { text: 'いまのシフト表の件数' }),
     countBand(res),
     reached(d, res),

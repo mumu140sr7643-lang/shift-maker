@@ -1,8 +1,8 @@
 // 仕上げの入れ替え（6-1。docs/じっくり作る案.md の 3 章）。画面には触らない。node からも使う。
 // 自動で作った表の、決まっていないマスどうしを入れ替え、check.js で数えて良くなるときだけ入れる。
 // 変えないもの：各人の 出勤・公休・有給・余り日 の日数と、各日の シフトごとの人数。乱数は使わない（同じ表なら同じ答え）。
-import { checkTable, isImproved, compareResults } from '../check.js?v=6.1';
-import { clone, cellOf, monthDays, shiftById } from '../model.js?v=6.1';
+import { checkTable, isImproved, compareResults } from '../check.js?v=6.2';
+import { clone, cellOf, monthDays, shiftById } from '../model.js?v=6.2';
 
 // たすき掛けで見る、もう1つの日の幅（その日の前後）
 const CROSS_RANGE = 6;

@@ -1,8 +1,8 @@
 // 自動で作るときの式を作る（docs/自動で作る案.md の 2〜4 章）。画面には触らない。ブラウザでも node でも使う。
 // 式は HiGHS が読める「LP の文」の形で作る。どの答えを採るかは、できた表を check.js で数えて決める。
-import { shiftById, monthDays, needOn, rankOrder, cellOf } from '../model.js?v=6.1';
-import { strengthOf } from '../rules.js?v=6.1';
-import { weekdayOf } from '../calendar.js?v=6.1';
+import { shiftById, monthDays, needOn, rankOrder, cellOf } from '../model.js?v=6.2';
+import { strengthOf } from '../rules.js?v=6.2';
+import { weekdayOf } from '../calendar.js?v=6.2';
 
 // 段の順番。rules が '*hard' / '*soft' の段は、ほかの段に入らない決まりをまとめる
 export const STAGES = [
@@ -71,7 +71,8 @@ function fixedCellOf(data, pid, day) {
 
 // keepCurrent：エラーを自動で直す（4-2）ときだけ。いまの表の値から変わるマスを数え、「できれば」の段で少しだけ減らす
 // changeLimit：そのとき、変わるマスの数の上限（null なら上限なし）
-export function buildModel(data, { leaderWeight = 0, keepCurrent = false, changeLimit = null } = {}) {
+// exact：じっくり作るの候補 う（6-2）だけ。時間帯の切り替え回数を休みをはさんでも数える式にし、責任者の順位を check.js と同じ数え方の式で入れる
+export function buildModel(data, { leaderWeight = 0, keepCurrent = false, changeLimit = null, exact = false } = {}) {
   const N = monthDays(data);
   const { year, month } = data.month;
   const work = data.settings.work;
@@ -296,6 +297,36 @@ export function buildModel(data, { leaderWeight = 0, keepCurrent = false, change
         if (k.target[g] > 0 && on('skillTarget')) softGe('skillTarget', have, k.target[g]);
       }
     }
+    if (exact && on('leaderRank')) {
+      // check.js と同じ数え方：その日その時間帯の1日1人の役に人がいて、役のだれよりも順位が上の人が出ていれば1件。
+      // 順位ごとに、「その順位の人が出ている」(A)・「それより下の人が役にいる」(C) を 0〜1 の数で持ち、
+      // 件数 ≧ A + C − 1 − （その順位より上か同じ人が役にいる数）。A・C は小さくしたいので、ちょうど 0 か 1 になる
+      const ordOf = (p) => {
+        const i = p.rank ? rankOrder(data, p.rank) : -1;
+        return i >= 0 ? i : Infinity;
+      };
+      const levels = [...new Set(data.staff.map(ordOf).filter(Number.isFinite))].sort((a, b) => a - b);
+      const used = (l) => !(l.isConst && l.c === 0);
+      for (const g of ['early', 'late', 'night']) {
+        const inG = (p, role) => shiftX(p, d, (s) => s.counts && !s.training && s.group === g && (!role || s.onePerDay));
+        let v = null;
+        for (const r of levels) {
+          const here = data.staff.filter((p) => ordOf(p) === r).map((p) => inG(p, false)).filter(used);
+          const below = data.staff.filter((q) => ordOf(q) > r).map((q) => inG(q, true)).filter(used);
+          if (!here.length || !below.length) continue;
+          const upper = new Lin();
+          for (const q of data.staff) if (ordOf(q) <= r) upper.add(inG(q, true));
+          const a = `ldA_${d}_${g}_${r}`;
+          const c = `ldC_${d}_${g}_${r}`;
+          cont.add(a);
+          cont.add(c);
+          for (const l of here) con(lin(a).add(l, -1), '>=', 0);
+          for (const l of below) con(lin(c).add(l, -1), '>=', 0);
+          v ??= slack('leaderRank');
+          con(lin(a).add(c).add(upper, -1).add(v, -1), '<=', 1);
+        }
+      }
+    }
     if (on('specialRank')) {
       for (const sd of data.month.special.filter((x) => x.day === d)) {
         for (const rn of sd.rankNeeds) {
@@ -327,7 +358,36 @@ export function buildModel(data, { leaderWeight = 0, keepCurrent = false, change
         if (on(rule)) softLe(rule, lin(lateAt(d - 1), rest3(p, d), early(p, d + 1)), 2);
       }
     }
-    if (on('switchInStreak') || on('switchCount')) {
+    if (exact && on('switchCount')) {
+      // check.js と同じ数え方：早い・遅いの出勤だけを順に見て、前の出勤と時間帯が違えば1回（休み・夜勤・半休・明けは飛ばす）。
+      // last_E・last_L は「その日までの最後の出勤が早い・遅い」（0〜1。小さくしたいので、下の式でちょうど 0 か 1 になる）
+      const changes = new Lin();
+      let prevE = lin(0);
+      let prevL = lin(0);
+      for (let d = 1; d <= N; d += 1) {
+        const e = early(p, d);
+        const l = late(p, d);
+        if (d > 1) {
+          const c = `sw_${p.id}_${d}`;
+          cont.add(c);
+          con(lin(e).add(prevL).add(c, -1), '<=', 1);
+          con(lin(l).add(prevE).add(c, -1), '<=', 1);
+          changes.add(c);
+        }
+        const nowE = `lastE_${p.id}_${d}`;
+        const nowL = `lastL_${p.id}_${d}`;
+        cont.add(nowE);
+        cont.add(nowL);
+        con(lin(nowE).add(e, -1), '>=', 0);
+        con(lin(nowL).add(l, -1), '>=', 0);
+        con(lin(nowE).add(prevE, -1).add(e).add(l), '>=', 0);
+        con(lin(nowL).add(prevL, -1).add(e).add(l), '>=', 0);
+        prevE = lin(nowE);
+        prevL = lin(nowL);
+      }
+      softLe('switchCount', changes, work.maxSwitches);
+    }
+    if (on('switchInStreak') || (on('switchCount') && !exact)) {
       const changes = new Lin();
       for (let d = 1; d < N; d += 1) {
         const a = lin(early(p, d), late(p, d + 1));
@@ -336,7 +396,8 @@ export function buildModel(data, { leaderWeight = 0, keepCurrent = false, change
           softLe('switchInStreak', a, 1);
           softLe('switchInStreak', b, 1);
         }
-        if (on('switchCount') && a.isConst && b.isConst) {
+        if (!on('switchCount') || exact) continue;
+        if (a.isConst && b.isConst) {
           // 2日とも決まっているときは、入れかわりかどうかも決まっている
           if (a.c > 1 || b.c > 1) changes.add(1);
         } else if (on('switchCount')) {
@@ -347,7 +408,7 @@ export function buildModel(data, { leaderWeight = 0, keepCurrent = false, change
           changes.add(c);
         }
       }
-      if (on('switchCount')) softLe('switchCount', changes, work.maxSwitches);
+      if (on('switchCount') && !exact) softLe('switchCount', changes, work.maxSwitches);
     }
     if (on('bias') && p.groupPref === 'any') {
       const e = new Lin();
@@ -422,7 +483,7 @@ export function buildModel(data, { leaderWeight = 0, keepCurrent = false, change
     if (Array.isArray(st.rules)) return st.rules.filter((r) => on(r) && (r === 'sixPlus' || S(r) === 'hard'));
     const want = st.rules === '*hard' ? 'hard' : 'soft';
     // 自分の段がある決まりでも、「できれば」にしたものは「できれば」の段へ入る
-    const list = Object.keys(pen).filter((r) => !r.startsWith('_') && !NOT_IN_STAGES.has(r) && S(r) === want && !(want === 'hard' && OWN_STAGE.has(r)));
+    const list = Object.keys(pen).filter((r) => !r.startsWith('_') && (!NOT_IN_STAGES.has(r) || (exact && r === 'leaderRank')) && S(r) === want && !(want === 'hard' && OWN_STAGE.has(r)));
     if (want === 'soft') {
       list.push('_spare');
       if (pen._change) list.push('_change');
@@ -439,11 +500,13 @@ export function buildModel(data, { leaderWeight = 0, keepCurrent = false, change
     return { key: st.key, name: st.name, rules, objective: obj };
   }).filter((st) => st.rules.length > 0);
 
-  // LP の文。bounds: [{ objective: Lin, max }] は、前の段の「これ以上悪くしない」
-  const lp = (objective, bounds) => {
+  // LP の文。bounds: [{ objective: Lin, max }] は、前の段の「これ以上悪くしない」。
+  // fix（じっくり作るの締め直しだけ）：2択の変数の名前 → 値 の Map。その値に決めて解く
+  const lp = (objective, bounds, fix = null) => {
     const lines = ['Minimize', ` obj: ${terms(objective)}`, 'Subject To'];
     cons.forEach((c, i) => lines.push(` c${i}: ${c}`));
     bounds.forEach((b, i) => lines.push(` b${i}: ${terms(b.objective)} <= ${fmt(b.max - b.objective.c + 1e-6)}`));
+    if (fix) [...bin].forEach((v, i) => lines.push(` f${i}: ${v} = ${(fix.get(v) ?? 0) > 0.5 ? 1 : 0}`));
     lines.push(' fixzero: zero = 0', 'Binary', ` ${[...bin].join(' ')}`, 'End');
     return lines.join('\n');
   };

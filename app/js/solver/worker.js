@@ -1,19 +1,30 @@
 // 自動で作るの裏方（Web Worker）。画面が固まらないように、ここで HiGHS を動かす。
 // 受け取る：{ kind: 'generate', data, timeLimit, seed }（自動で作る・途中から作り直す。途中からは、写しに固定の印を付けたデータ）
 //         { kind: 'repair', data, secondsEach, seed }（エラーを自動で直す。上限ごとの案を作る）
+//         { kind: 'careful', role, data, seed, seconds, quickSeconds }（じっくり作るの候補1つ。送るものは careful.js の runCandidate）
 // 送る：{ type: 'progress', stage, count, name, phase, seconds, totals? } … 段の始まりと終わり（終わりには、その時点の表を check.js で数えた件数）
 //       { type: 'done', result }                                         … 作り終えた（作れなかったときも）
 //       { type: 'error', message }                                       … 計算の部品が動かなかった
-import highsLoader from '../../../vendor/highs/highs.mjs?v=6.1';
-import { solveStaged } from './stages.js?v=6.1';
-import { solveRepair } from './repair.js?v=6.1';
-import { checkTable } from '../check.js?v=6.1';
+import highsLoader from '../../../vendor/highs/highs.mjs?v=6.2';
+import { solveStaged } from './stages.js?v=6.2';
+import { solveRepair } from './repair.js?v=6.2';
+import { runCandidate } from './careful.js?v=6.2';
+import { checkTable } from '../check.js?v=6.2';
 
-const WASM_URL = new URL('../../../vendor/highs/highs.wasm?v=6.1', import.meta.url).href;
+const WASM_URL = new URL('../../../vendor/highs/highs.wasm?v=6.2', import.meta.url).href;
 const loadHighs = () => highsLoader({ locateFile: () => WASM_URL });
 
 self.onmessage = async (e) => {
   const { kind = 'generate', data, timeLimit, secondsEach, seed } = e.data;
+  if (kind === 'careful') {
+    const { role, seconds, quickSeconds } = e.data;
+    try {
+      await runCandidate(data, { role, seed, seconds, quickSeconds, loadHighs, post: (m) => self.postMessage(m) });
+    } catch (err) {
+      self.postMessage({ type: 'error', role, message: String(err?.message ?? err) });
+    }
+    return;
+  }
   const totalsOf = (table) => {
     const res = checkTable({ ...data, month: { ...data.month, table } });
     return res.tableEmpty ? null : res.totals;

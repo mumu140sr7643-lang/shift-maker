@@ -1,5 +1,6 @@
 // 道具どうしで使う小さな関数。
 import { readdirSync, statSync } from 'node:fs';
+import { execSync } from 'node:child_process';
 import { join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -31,4 +32,17 @@ export function allFiles() {
 
 export function rel(p) {
   return relative(ROOT, p).split(sep).join('/');
+}
+
+// いまのコミットの番号と、コミットしていない変更があるか（測りの結果に書く。測った中身と、確かめ役が確かめる中身を同じにするため）
+export function gitCommit() {
+  const run = (cmd) => {
+    try {
+      return execSync(cmd, { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+    } catch {
+      return null;
+    }
+  };
+  const status = run('git status --porcelain');
+  return { commit: run('git rev-parse --short HEAD'), dirty: status === null ? null : status.length > 0 };
 }

@@ -2,6 +2,8 @@
 // 使い方:
 //   node tools/solve.mjs 保存したファイル.json [--nodes 2000] [--seed 1] [--time 60] [--out フォルダ] [--leader-weight 0.3] [--soft-warm on|off] [--soft-effort 1] [--from-day 15]
 //   --from-day 15：途中から作り直す（4-2）。14日までのマスは、いまのまま残す（写しで固定と同じにして解く。できた表には固定の印を付けない）
+//   --exact：じっくり作るの候補 う の式（時間帯の切り替え回数・責任者の順位を check.js と同じ数え方で）。段の量と検査の量の比べにも入れる
+//   --tighten：じっくり作るの締め直し（時間切れの「絶対」の段の量を、2択の変数を決めて解き直す）
 //   --nodes（調べる数の上限）で区切ると、同じデータ・同じ種なら、いつも同じ答えになる。
 //   --time で区切ると、画面と同じ（パソコンの速さで答えが変わる）。
 // --out に出すもの：stages.json（段ごとの結果）・result.json（できた表を入れたデータ。このアプリで取り込める）・
@@ -24,7 +26,8 @@ function arg(name, fallback = null) {
 // 段の量と、できた表を check.js で数えた量を比べる（式の作りまちがいを見つけるため）
 //   exact：同じになるはずのもの／approx：近い形で数えているので違ってよいもの
 //   6連勤以上・連勤超過は、前の月だけで超えていた分（どう作っても変わらない）を式に入れていないので、検査の量から引く
-export function compareAmounts(solved, counted, data) {
+//   exact（じっくり作るの候補 う の式）のときは、時間帯の切り替え回数・責任者の順位も「同じになるはずのもの」に入れる
+export function compareAmounts(solved, counted, data, { exact: exactModel = false } = {}) {
   const by = counted.byRule;
   const prevDays = (it) => (it.from < 1 ? 1 - it.from : 0);
   const six = counted.items.filter((it) => it.rule === 'sixPlus').reduce((s, it) => s + it.amount - 5 - Math.max(0, prevDays(it) - 5), 0);
@@ -44,6 +47,12 @@ export function compareAmounts(solved, counted, data) {
     switchCount: { solver: solved.amounts.switchCount ?? 0, check: by.switchCount.amount },
     leaderRank: { solver: null, check: by.leaderRank.count },
   };
+  if (exactModel) {
+    exact.switchCount = { solver: solved.amounts.switchCount ?? 0, check: by.switchCount.amount };
+    exact.leaderRank = { solver: solved.amounts.leaderRank ?? 0, check: by.leaderRank.count };
+    delete approx.switchCount;
+    delete approx.leaderRank;
+  }
   // 解ききっていない段（時間・調べる数の上限）の決まりは、違反の量を表す数が実際より大きいままのことがあるので、
   // 「式の量 ≧ 検査の量」なら よし とする（loose: true）。解ききった段の決まりは、ぴったり同じでなければいけない
   const stageOf = (rule) => solved.stages.find((st) => st.rules?.includes(rule));
@@ -61,7 +70,7 @@ export function compareAmounts(solved, counted, data) {
   return { exact, approx };
 }
 
-export async function solveFile(data, { nodes = null, seed = 1, time = null, leaderWeight = 0, presolve = 'on', warmStart, softWarmStart, softEffort } = {}) {
+export async function solveFile(data, { nodes = null, seed = 1, time = null, leaderWeight = 0, presolve = 'on', warmStart, softWarmStart, softEffort, exact = false, tighten = false } = {}) {
   const solved = await solveStaged(data, {
     loadHighs: () => highsLoader(),
     nodeLimit: nodes,
@@ -69,6 +78,8 @@ export async function solveFile(data, { nodes = null, seed = 1, time = null, lea
     seed,
     leaderWeight,
     presolve,
+    ...(exact ? { exact } : {}),
+    ...(tighten ? { tighten } : {}),
     ...(warmStart === undefined ? {} : { warmStart }),
     ...(softWarmStart === undefined ? {} : { softWarmStart }),
     ...(softEffort === undefined ? {} : { softOptions: { mip_heuristic_effort: softEffort } }),
@@ -77,7 +88,7 @@ export async function solveFile(data, { nodes = null, seed = 1, time = null, lea
   const out = clone(data);
   out.month.table = solved.table;
   const counted = checkTable(out);
-  return { solved, data: out, counted, compare: compareAmounts(solved, counted, data) };
+  return { solved, data: out, counted, compare: compareAmounts(solved, counted, data, { exact }) };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
@@ -95,12 +106,13 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const time = arg('time') ? Number(arg('time')) : null;
   const soft = arg('soft-warm');
   const fromDay = arg('from-day') ? Number(arg('from-day')) : null;
-  const res = await solveFile(fromDay ? prepareRestart(r.data, fromDay) : r.data, { nodes: nodes ?? (time ? null : 2000), seed: Number(arg('seed', 1)), time, leaderWeight: Number(arg('leader-weight', 0)), presolve: arg('presolve', 'on'), softWarmStart: soft === null ? undefined : soft === 'on', softEffort: arg('soft-effort') === null ? undefined : Number(arg('soft-effort')) });
+  const exact = process.argv.includes('--exact');
+  const res = await solveFile(fromDay ? prepareRestart(r.data, fromDay) : r.data, { nodes: nodes ?? (time ? null : 2000), seed: Number(arg('seed', 1)), time, leaderWeight: Number(arg('leader-weight', 0)), presolve: arg('presolve', 'on'), softWarmStart: soft === null ? undefined : soft === 'on', softEffort: arg('soft-effort') === null ? undefined : Number(arg('soft-effort')), exact, tighten: process.argv.includes('--tighten') });
   if (fromDay && res.data) {
     // 写しに付けた固定の印は、できた表には残さない
     res.data.month.marks = clone(r.data.month.marks);
     res.counted = checkTable(res.data);
-    res.compare = compareAmounts(res.solved, res.counted, res.data);
+    res.compare = compareAmounts(res.solved, res.counted, res.data, { exact });
   }
   const out = arg('out');
   if (out) {

@@ -1,9 +1,9 @@
 // データをまるごと消す・置きかえる操作（リセット・月の片付け・取り込み・控えやひとつ前の保存から戻す）の
 // 前に、控えを残す。どんな順で何回続けても、確認の文で「消える」と書いたもの以外は戻せるようにする。
-import { loadBackups, addBackup, MAX_BACKUPS, BACKUP_REASONS } from './storage.js?v=6.1';
-import { canonicalJSON } from './model.js?v=6.1';
-import { isUntouchedSample, SAMPLE_KINDS } from './samples.js?v=6.1';
-import { timeLabel, monthLabel } from './calendar.js?v=6.1';
+import { loadBackups, addBackup, MAX_BACKUPS, BACKUP_REASONS } from './storage.js?v=6.2';
+import { canonicalJSON } from './model.js?v=6.2';
+import { isUntouchedSample, SAMPLE_KINDS } from './samples.js?v=6.2';
+import { timeLabel, monthLabel } from './calendar.js?v=6.2';
 
 // 控えを作るか。skip: 'untouched'（見本のまま）・'same'（同じ控えがある）・null（作る）
 // drops: 作ると消えるいちばん古い控え

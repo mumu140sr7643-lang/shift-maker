@@ -1,8 +1,8 @@
 // 見込みと説明（v5。docs/見込みと説明の案.md）の数え方。画面には触らない。node からも使う。
 // 5-1：その日に出られる人・あと何人休めるか（日ごとの余裕）・きつい期間・新しくできた 0 人の日ときつい期間。
-import { monthDays, cellOf, shiftById, needRows, needOn, clone, setRequest, setLock, setCellByHand, cellName } from './model.js?v=6.1';
-import { unavoidableErrors, checkTable } from './check.js?v=6.1';
-import { strengthOf, RULE_BY_ID } from './rules.js?v=6.1';
+import { monthDays, cellOf, shiftById, needRows, needOn, clone, setRequest, setLock, setCellByHand, cellName } from './model.js?v=6.2';
+import { unavoidableErrors, checkTable } from './check.js?v=6.2';
+import { strengthOf, RULE_BY_ID } from './rules.js?v=6.2';
 
 export const GROUPS = ['early', 'late', 'night'];
 
@@ -442,6 +442,12 @@ export function lowerBound(data) {
   const six = byRule.sixPlus ?? 0;
   const hard = Object.entries(byRule).filter(([r]) => r !== 'sixPlus' && S(r) === 'hard').reduce((a, [, n]) => a + n, 0);
   return { items, byRule, six, hard };
+}
+
+// 作った表の件数（checkTable の結果）が、見込みの最低件数に届いているか（6連勤以上の件数と絶対の件数の合計が、見込みと同じ）。
+// 画面の「見込みの最低件数に届いています」と、測る道具（tools/careful-bench.mjs）で同じものを使う
+export function reachedLowerBound(res, lb) {
+  return !res.tableEmpty && res.totals.sixPlus === lb.six && res.totals.hard === lb.hard;
 }
 
 // 直し方のボタン（案の 4-2）：理由のマスの希望・固定を、写しで外して見込みを数え直し、最低件数が減るものだけ（1つの理由に3つまで）。

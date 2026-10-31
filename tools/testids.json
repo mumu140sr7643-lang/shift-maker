@@ -1082,5 +1082,37 @@
  {
   "id": "reason-close",
   "find": "reason-close"
+ },
+ {
+  "id": "run-quick",
+  "find": "run-quick"
+ },
+ {
+  "id": "run-early",
+  "find": "run-early"
+ },
+ {
+  "id": "run-early-why",
+  "find": "run-early-why"
+ },
+ {
+  "id": "run-single",
+  "find": "run-single"
+ },
+ {
+  "id": "make-help",
+  "find": "make-help"
+ },
+ {
+  "id": "run-vs-quick",
+  "find": "run-vs-quick"
+ },
+ {
+  "id": "run-quick-best",
+  "find": "run-quick-best"
+ },
+ {
+  "id": "run-finish",
+  "find": "run-finish"
  }
 ]

@@ -23,6 +23,7 @@ import { csvCell, toCsv, shiftTableRows } from '../app/js/csv.js';
 import { dayMargins, tightRanges, newTightness, staffingTable, monthTotals, lowerBound, fixesFor, applyFix, reasonsFor } from '../app/js/outlook.js';
 import { checkFlow, checkMinimum } from './outlook-brute.mjs';
 import { finishTable, moveAllowed } from '../app/js/solver/finish.js';
+import { startCareful, workerCount, timePlan } from '../app/js/solver/careful.js';
 import { verifyFinish } from './finish.mjs';
 import { stressOne } from './finish-stress.mjs';
 import { messyMonth } from './repair-stress.mjs';
@@ -888,6 +889,154 @@ const check = (name, problems) => results.push({ name, problems });
   // 乱数の手直しをした月（全部は tools/finish-stress.mjs）
   for (let seed = 1; seed <= 4; seed += 1) problems.push(...stressOne(await messyMonth(seed), 400).problems.map((x) => `手直しの月 ${seed}：${x}`));
   check('仕上げの入れ替え（変えないもの・動かさないマス・改善だけ・6連勤以上を作らない・同じ答え）', problems);
+}
+
+// 22. じっくり作る（careful.js）（6-2。docs/じっくり作る案.md の 1・2・4 章）
+{
+  const problems = [];
+  // Worker の数（4 章）
+  const cases = [
+    [{ cpus: 1 }, 1], [{ cpus: 2 }, 1], [{ cpus: 4 }, 3], [{ cpus: 16 }, 4], [{}, 1],
+    [{ cpus: 16, memory: 2 }, 1], [{ cpus: 16, memory: 4 }, 2], [{ cpus: 16, memory: 8 }, 4],
+    [{ cpus: 16, touchOnly: true }, 2], [{ cpus: 16, memory: 8, touchOnly: true }, 2], [{ cpus: 2, touchOnly: true }, 1],
+  ];
+  for (const [env, want] of cases) if (workerCount(env) !== want) problems.push(`Worker の数 ${JSON.stringify(env)} → ${workerCount(env)}（${want} のはず）`);
+  const tp = timePlan(600);
+  if (tp.search !== 570 || tp.finish !== 25) problems.push(`600秒の配分が 探す 570・仕上げ 25 でない（${JSON.stringify(tp)}）`);
+
+  // まとめ役：偽の Worker で、選び方・ここまでで終える・中止・止まった・時間の見張り を確かめる（HiGHS は使わない）
+  const d = M.emptyData(2026, 11, 'blank');
+  const E = M.newShift(d, { symbol: '早', name: '早', group: 'early', combine: true, need: { full: 0, part: 0, all: 1 } });
+  d.settings.shifts = [E];
+  d.staff = ['A', 'B'].map((name) => M.newStaff(d, { name, shifts: [E.id], offDays: 15 }));
+  const tableBy = (aWorks) => {
+    const t = {};
+    for (let day = 1; day <= 30; day += 1) {
+      t[d.staff[0].id] = { ...(t[d.staff[0].id] ?? {}), [day]: aWorks(day) ? { kind: 'shift', shift: E.id } : { kind: 'off' } };
+      t[d.staff[1].id] = { ...(t[d.staff[1].id] ?? {}), [day]: aWorks(day) ? { kind: 'off' } : { kind: 'shift', shift: E.id } };
+    }
+    return t;
+  };
+  const worse = tableBy((day) => day % 2 === 1);
+  const better = finishTable({ ...d, month: { ...d.month, table: worse } }, { seconds: null }).table;
+  const fake = (script) => {
+    const made = [];
+    const timers = [];
+    const makeWorker = () => {
+      const w = { listeners: [], errors: [], terminated: false };
+      made.push(w);
+      return {
+        post: (m) => queueMicrotask(() => script(m, (x) => !w.terminated && w.listeners.forEach((fn) => fn(x)), () => w.errors.forEach((fn) => fn(new Error('止まった'))))),
+        onMessage: (fn) => w.listeners.push(fn),
+        onError: (fn) => w.errors.push(fn),
+        terminate: () => {
+          w.terminated = true;
+        },
+      };
+    };
+    return { made, timers, makeWorker, setTimer: (fn, ms) => timers.push({ fn, ms }) && timers.length, clearTimer: () => {} };
+  };
+  const tick = () => new Promise((r) => setTimeout(r, 0));
+  {
+    // あ が1分の答え（悪いほう）、い が良いほう → い を選ぶ。全部終わったら done
+    const f = fake((m, send) => {
+      if (m.role === 'a') send({ type: 'answer', role: 'a', label: 'quick', table: worse, stages: [] });
+      if (m.role === 'i') send({ type: 'answer', role: 'i', label: 'stage', table: better, stages: [] });
+      send({ type: 'end', role: m.role, stages: [{ key: 'soft', name: 'x', status: 'solved', seconds: 1 }] });
+    });
+    const job = startCareful(d, { makeWorker: f.makeWorker, workers: 2, seconds: 600, setTimer: f.setTimer, clearTimer: f.clearTimer });
+    const r = await job.promise;
+    if (!r.ok || r.picked.role !== 'i' || r.how !== 'done' || r.count !== 2) problems.push(`いちばん良い答えを選ばない（${JSON.stringify(r.picked)} ${r.how}）`);
+    if (!r.quick || r.quick.totals.soft <= C.checkTable({ ...d, month: { ...d.month, table: r.table } }).totals.soft) problems.push('1分の答えの件数を残していない・選んだ答えのほうが悪い');
+    if (!f.made.every((w) => w.terminated)) problems.push('終わったあとに Worker を止めていない');
+    if (f.timers.find((x) => x.ms === 620000) === undefined) problems.push('時間の見張りが 600＋20秒でない');
+  }
+  {
+    // 1分の答えの前は「ここまでで終える」ができない。あとはできて、そのときのいちばん良い答えを入れる。中止は答えを捨てる
+    let release;
+    const gate = new Promise((r) => {
+      release = r;
+    });
+    const f = fake(async (m, send) => {
+      await gate;
+      if (m.role === 'a') send({ type: 'answer', role: 'a', label: 'quick', table: worse, stages: [] });
+    });
+    const job = startCareful(d, { makeWorker: f.makeWorker, workers: 3, setTimer: f.setTimer, clearTimer: f.clearTimer });
+    if (job.finishNow()) problems.push('1分の答えの前に「ここまでの答えで終える」ができた');
+    release();
+    await tick();
+    await tick();
+    if (!job.finishNow()) problems.push('1分の答えのあとに「ここまでの答えで終える」ができない');
+    const r = await job.promise;
+    if (!r.ok || r.how !== 'early' || r.picked.label !== 'quick' || !f.made.every((w) => w.terminated)) problems.push(`ここまでで終えたときの結果が違う（${r.how} ${JSON.stringify(r.picked)}）`);
+    const f2 = fake((m, send) => m.role === 'a' && send({ type: 'answer', role: 'a', label: 'quick', table: worse, stages: [] }));
+    const job2 = startCareful(d, { makeWorker: f2.makeWorker, workers: 2, setTimer: f2.setTimer, clearTimer: f2.clearTimer });
+    await tick();
+    job2.stop();
+    const r2 = await job2.promise;
+    if (r2.ok || r2.reason !== 'stopped' || !f2.made.every((w) => w.terminated)) problems.push('中止で、答えを捨てて全部の Worker を止めない');
+  }
+  {
+    // 全部の Worker が止まって答えが無い → lost。時間の見張りで、届いた答えから選ぶ
+    const f = fake((m, send, fail) => fail());
+    const r = await startCareful(d, { makeWorker: f.makeWorker, workers: 2, setTimer: f.setTimer, clearTimer: f.clearTimer }).promise;
+    if (r.ok || r.reason !== 'lost') problems.push(`全部止まったのに「計算の部品が止まりました」にならない（${r.reason}）`);
+    const g = fake((m, send) => m.role === 'i' && send({ type: 'answer', role: 'i', label: 'stage', table: better, stages: [] }));
+    const job = startCareful(d, { makeWorker: g.makeWorker, workers: 2, setTimer: g.setTimer, clearTimer: g.clearTimer });
+    await tick();
+    g.timers.find((x) => x.ms === 620000).fn();
+    const r2 = await job.promise;
+    if (!r2.ok || r2.how !== 'timeout' || r2.picked.role !== 'i' || !g.made.every((w) => w.terminated)) problems.push(`時間の見張りで、届いた答えから選ばない（${r2.how}）`);
+  }
+
+  // 候補 う の式（時間帯の切り替え回数・責任者の順位）の量が check.js の数と同じか：
+  // 見本の表を段1〜5 で作り、同じ日の2人をいくつか入れ替えて崩し、全部のマスを固定して解く（2択の変数がほぼ無いので、すぐ解ききる）
+  let tested = 0;
+  let nonzero = 0;
+  for (const kind of ['restaurant', 'retail', 'care']) {
+    const base = S.buildSample(kind, 2026, 11);
+    const made = await solveStaged(base, { loadHighs: () => highsLoader(), nodeLimit: 20, seed: 1, maxStages: 5 });
+    if (!made.ok) {
+      problems.push(`見本 ${kind} が作れなかった（${made.reason}）`);
+      continue;
+    }
+    for (let k = 0; k < 3; k += 1) {
+      const dd = M.clone(base);
+      dd.month.table = M.clone(made.table);
+      const N = M.monthDays(dd);
+      let r = 7 + k * 13;
+      const rand = (n) => {
+        r = (r * 1103515245 + 12345) % 2147483648;
+        return r % n;
+      };
+      for (let i = 0; i < 40; i += 1) {
+        const day = 1 + rand(N);
+        const a = dd.staff[rand(dd.staff.length)];
+        const b = dd.staff[rand(dd.staff.length)];
+        const va = dd.month.table[a.id]?.[day];
+        const vb = dd.month.table[b.id]?.[day];
+        if (a === b || va?.kind !== 'shift' || vb?.kind !== 'shift' || !a.shifts.includes(vb.shift) || !b.shifts.includes(va.shift)) continue;
+        dd.month.table[a.id][day] = vb;
+        dd.month.table[b.id][day] = va;
+      }
+      for (const p of dd.staff) for (let day = 1; day <= N; day += 1) M.setLock(dd, p.id, day, true);
+      // 「できれば」の段の「解ききった」を確かめられるよう、はじめの答えは渡さない
+      const res = await solveStaged(dd, { loadHighs: () => highsLoader(), nodeLimit: 50, seed: 1, exact: true, softWarmStart: false });
+      if (!res.ok) continue;
+      if (!res.stages.every((s) => s.status === 'solved')) continue;
+      const counted = C.checkTable(dd);
+      tested += 1;
+      const pairs = [['switchCount', counted.byRule.switchCount.amount], ['leaderRank', counted.byRule.leaderRank.count]];
+      for (const [rule, want] of pairs) {
+        if (counted.byRule[rule].strength === 'off') continue;
+        if (want) nonzero += 1;
+        if (Math.abs((res.amounts[rule] ?? 0) - want) > 1e-6) problems.push(`見本 ${kind} の崩した表 ${k + 1}：う の式の ${rule} が ${res.amounts[rule]}・check.js は ${want}`);
+      }
+    }
+  }
+  if (tested < 6) problems.push(`う の式を確かめられた表が少ない（${tested}）`);
+  if (nonzero < 3) problems.push(`う の式の確かめで、件数が 0 でない所が少ない（${nonzero}）`);
+  check(`じっくり作る（Worker の数・選び方・ここまでで終える・中止・止まった・時間の見張り・う の式 ${tested}表）`, problems);
 }
 
 // 10. 言葉の確かめ：一覧の言葉が、リポジトリのファイル・コミットの文に入っていないか

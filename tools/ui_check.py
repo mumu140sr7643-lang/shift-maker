@@ -1061,7 +1061,7 @@ def scenario_generate(browser, base):
     t(page, "sample-restaurant").click()
     t(page, "step-5").click()
     ok(t(page, "precheck-ok").count() == 1, "見本では、作る前の確かめにぶつかりが無いと出る")
-    ok(t(page, "mode-quick").is_checked() and t(page, "mode-careful").is_disabled(), "1分で作るが選ばれ、じっくり作るはまだ選べない")
+    ok(t(page, "mode-quick").is_checked() and t(page, "mode-careful").is_enabled() and not t(page, "mode-careful").is_checked(), "はじめは1分で作るが選ばれている（じっくり作るも選べる）")
     before = stored(page)
 
     # 1. 中止すると、表は前のまま。計算中は、ほかの所を押せない
@@ -1209,6 +1209,123 @@ def scenario_generate(browser, base):
     ok(six == "1", "避けられない 6連勤以上は 1件だけ（ほかに作らない）", str(six))
     look(page, "dark 375 手順5 作った結果", "step5-result-dark-375")
     ok(not errors, "エラー0 作る前の確かめ", " / ".join(errors[:3]))
+    ctx.close()
+
+
+WORKERS_JS = """(env) => {
+  Object.defineProperty(Navigator.prototype, 'hardwareConcurrency', { get: () => env.cpus, configurable: true });
+  if (env.mem === null) delete Navigator.prototype.deviceMemory;
+  else Object.defineProperty(Navigator.prototype, 'deviceMemory', { get: () => env.mem, configurable: true });
+}"""
+
+
+def workers_left(page, seconds=5):
+    """動いている Worker の数。計算の途中で止めた Worker は、Chromium が止めきるまで2秒ほどかかるので、0本になるまで seconds 秒まで待つ"""
+    for _ in range(int(seconds * 4)):
+        if not page.workers:
+            return 0
+        page.wait_for_timeout(250)
+    return len(page.workers)
+
+
+def careful_page(browser, base, url, width=1280, scheme="light", env=None):
+    ctx, page, errors = fresh_page(browser, base, width, scheme)
+    if env is not None:
+        ctx.add_init_script(script=f"({WORKERS_JS})({json.dumps(env)})")
+    page.goto(url)
+    t(page, "sample-restaurant").click()
+    go(page, 5, width)
+    t(page, "mode-careful").check()
+    return ctx, page, errors
+
+
+def scenario_careful(browser, base):
+    """6-2：手順5 じっくり作る（Worker の数・中止・ここまでの答えで終える・元に戻す・作った結果）。?careful=20&seconds=5 に短くして確かめる"""
+    url = base + "/app/?careful=20&seconds=5"
+    # 1. Worker の数（hardwareConcurrency 1・2・4・16 → 1・1・3・4本、deviceMemory 2・4 → 1・2本まで、deviceMemory が無いときは CPU の数から）
+    cases = [({"cpus": 1, "mem": 8}, 1), ({"cpus": 2, "mem": 8}, 1), ({"cpus": 4, "mem": 8}, 3), ({"cpus": 16, "mem": 8}, 4), ({"cpus": 16, "mem": 2}, 1), ({"cpus": 16, "mem": 4}, 2), ({"cpus": 16, "mem": None}, 4)]
+    got = []
+    for env, want in cases:
+        ctx, page, errors = careful_page(browser, base, url, env=env)
+        help_text = t(page, "make-help").inner_text()
+        got.append((env, want, ("1通りずつ" in help_text) if want == 1 else (f"{want}通り同時に" in help_text)))
+        ctx.close()
+    ok(all(g for _, _, g in got), "じっくり作るの Worker の数が CPU の数・メモリで決まる（1・2・4・16 → 1・1・3・4、メモリ 2・4 → 1・2、メモリが分からない → CPU から）", json.dumps([(e, w) for e, w, g in got if not g]))
+    ctx, page, errors = careful_page(browser, base, url, env={"cpus": 2, "mem": 8})
+    t(page, "generate").click()
+    page.wait_for_selector('[data-testid="run-dialog"]')
+    ok(t(page, "run-dialog").get_attribute("data-workers") == "1" and t(page, "run-single").count() == 1, "Worker 1本のときは、小窓に「1通りずつ探します」と出る")
+    t(page, "run-stop").click()
+    ctx.close()
+
+    # 2. 中止：表は前のまま、Worker は 0本
+    ctx, page, errors = careful_page(browser, base, url)
+    before = stored(page)
+    t(page, "generate").click()
+    page.wait_for_selector('[data-testid="run-dialog"]')
+    ok(t(page, "run-dialog").get_attribute("data-workers") == "4", "CPU 16 のパソコンでは 4通り同時に探す", t(page, "run-dialog").get_attribute("data-workers"))
+    ok(t(page, "run-early").is_disabled() and t(page, "run-early-why").is_visible(), "1分の答えができるまでは「ここまでの答えで終える」を押せず、理由を出す")
+    page.wait_for_function("() => true", timeout=1000)
+    ok(len(page.workers) >= 1, "計算中は Worker が動いている", str(len(page.workers)))
+    look(page, "light 1280 手順5 じっくり作る 計算中", "step5-careful-running-light-1280")
+    t(page, "run-stop").click()
+    ok(t(page, "run-dialog").count() == 0 and t(page, "run-stopped").count() == 1, "中止で小窓が閉じ、「中止しました」と出る（じっくり作る）")
+    left = workers_left(page)
+    ok(left == 0, "中止のあと、動いている Worker が 0本（5秒まで待つ）", str(left))
+    ok(stored(page) == before, "中止すると、データは1文字も変わらない（じっくり作る）")
+
+    # 3. ここまでの答えで終える：1分の答えのあとに押せる。答えが入り、Worker は 0本。元に戻すで作る前に戻る
+    t(page, "generate").click()
+    page.wait_for_function("() => document.querySelector('[data-testid=run-early]') && !document.querySelector('[data-testid=run-early]').disabled", timeout=40000)
+    ok("1分の答え：6連勤以上" in t(page, "run-quick").inner_text(), "1分の答えができると、その件数が出る")
+    t(page, "run-early").click()
+    page.wait_for_selector('[data-testid="run-result"]', timeout=20000)
+    left = workers_left(page)
+    ok(left == 0, "ここまでの答えで終えたあと、動いている Worker が 0本（5秒まで待つ）", str(left))
+    data = json.loads(stored(page))
+    run = data["month"]["runs"][-1]
+    ok(run["mode"] == "careful" and run["how"] == "early" and "途中で終えました" in t(page, "run-when").inner_text(), "ここまでの答えで終えると、答えが入り「途中で終えました」と出る", t(page, "run-when").inner_text()[:60])
+    good, detail = band_vs_check(page)
+    ok(good, "ここまでで終えた結果の件数の帯が、check.js で数えた数と同じ", detail)
+    t(page, "run-undo").click()
+    after_undo = json.loads(stored(page))
+    ok(after_undo["month"]["table"] == json.loads(before)["month"]["table"] and len(after_undo["month"]["runs"]) == 0, "元に戻すで、作る前の表に戻る（じっくり作る）")
+
+    # 4. 最後まで作る：作った結果に、何通り・1分の答えからの変わり方が出る。記録に候補ごとの結果
+    t(page, "generate").click()
+    page.wait_for_selector('[data-testid="run-result"]', timeout=90000)
+    page.wait_for_timeout(500)
+    data = json.loads(stored(page))
+    run = data["month"]["runs"][-1]
+    ok(run["mode"] == "careful" and run["how"] in ("done", "timeout") and len(run["candidates"]) == 4 and run["quickTotals"] is not None, "作った記録に、じっくり作る・候補ごとの結果・1分の答えの件数が残る", json.dumps({k: run.get(k) for k in ["mode", "how", "count"]}))
+    ok("4通り" in t(page, "run-when").inner_text() and (t(page, "run-vs-quick").count() + t(page, "run-quick-best").count()) == 1, "作った結果に、何通りで探したかと、1分の答えからの変わり方が出る", t(page, "run-when").inner_text()[:60])
+    better_or_same = page.evaluate(
+        """async () => {
+          const v = document.querySelector('[data-testid="app-version"]').textContent.replace('版 ', '');
+          const C = await import(`./js/check.js?v=${v}`);
+          const d = JSON.parse(localStorage.getItem('shift-maker:data'));
+          const run = d.month.runs[d.month.runs.length - 1];
+          const res = C.checkTable(d);
+          const q = run.quickTotals;
+          return res.totals.sixPlus <= q.sixPlus && (res.totals.sixPlus < q.sixPlus || res.totals.hard <= q.hard);
+        }"""
+    )
+    ok(better_or_same, "選んだ答えは、1分の答えより 6連勤以上・絶対が多くない")
+    good, detail = band_vs_check(page)
+    ok(good, "じっくり作った結果の件数の帯が、check.js で数えた数と同じ", detail)
+    left = workers_left(page)
+    ok(left == 0, "作り終えたあと、動いている Worker が 0本（5秒まで待つ）", str(left))
+    look(page, "light 1280 手順5 じっくり作った結果", "step5-careful-result-light-1280")
+    ok(not errors, "エラー0 じっくり作る", " / ".join(errors[:3]))
+    ctx.close()
+
+    # 5. スマホの幅・暗い表示で、計算中の小窓が読める
+    ctx, page, errors = careful_page(browser, base, url, width=375, scheme="dark")
+    t(page, "generate").click()
+    page.wait_for_selector('[data-testid="run-dialog"]')
+    look(page, "dark 375 手順5 じっくり作る 計算中", "step5-careful-running-dark-375")
+    t(page, "run-stop").click()
+    ok(not errors, "エラー0 じっくり作る（375・暗い）", " / ".join(errors[:3]))
     ctx.close()
 
 
@@ -1834,6 +1951,7 @@ def main():
         scenario_text_safety(browser, base)
         scenario_broken(browser, base)
         scenario_generate(browser, base)
+        scenario_careful(browser, base)
         scenario_undo(browser, base)
         scenario_repair(browser, base)
         scenario_export(browser, base)
