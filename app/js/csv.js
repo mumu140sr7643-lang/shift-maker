@@ -1,9 +1,9 @@
 // CSV に出す（4-3）。画面には触らない。node からも使う。
 // Excel で開いても文字化けしないよう、先頭に BOM を付けた UTF-8・行の終わりは CRLF。
 // 式として読まれないよう、= + - @ タブ 改行（CR）で始まる文字の前に ' を付ける。カンマ・改行・" を含む文字は " で囲み、" は "" にする。
-import { monthDays, cellOf, cellSymbol } from './model.js?v=6.2';
-import { weekdayOf, WEEKDAY_LABELS } from './calendar.js?v=6.2';
-import { summarize, summaryColumns } from './summary.js?v=6.2';
+import { monthDays, cellOf, cellSymbol } from './model.js?v=6.3';
+import { weekdayOf, WEEKDAY_LABELS } from './calendar.js?v=6.3';
+import { summarize, summaryColumns } from './summary.js?v=6.3';
 
 const BOM = String.fromCharCode(0xfeff);
 const RISKY_START = /^[=+\-@\t\r]/;

@@ -1,23 +1,23 @@
 // 手順6 シフト表。マスを押すと、入れるものを選ぶ小窓が出る。変えるたびに決まりを検査し直し、印・件数の帯・一覧を直す。
 // 変えた所は履歴（history.js）に積み、「元に戻す」「やり直す」で戻せる。同じ日の2人のマスは、ドラッグか小窓で入れ替えられる。
 // 「エラーを自動で直す」の案を見ているあいだは、表を案の表に切りかえて見せる（repairview.js）。
-import { h, append } from '../dom.js?v=6.2';
-import { app } from '../state.js?v=6.2';
+import { h, append } from '../dom.js?v=6.3';
+import { app } from '../state.js?v=6.3';
 import {
   REST_KINDS, shiftById, cellOf, marksOf, requestOf, setCellByHand, setLock, swapCells, cellSymbol, cellName,
-} from '../model.js?v=6.2';
-import { record, undo, redo, nextUndo, nextRedo } from '../history.js?v=6.2';
-import { weekdayOf, WEEKDAY_LABELS } from '../calendar.js?v=6.2';
-import { notify } from '../dialog.js?v=6.2';
-import { checkTable } from '../check.js?v=6.2';
-import { screenTitle } from './common.js?v=6.2';
-import { staffGrid } from './staffgrid.js?v=6.2';
-import { needGrid } from './needgrid.js?v=6.2';
-import { markIndex, markClasses, markBadges, countBand, errorList, worsened } from './checkview.js?v=6.2';
-import { currentPreview, previewCard, openRepair, openRestart, repairBlockReason } from './repairview.js?v=6.2';
-import { summarize, summaryColumns } from '../summary.js?v=6.2';
-import { exportCsv, exportExcel } from '../files.js?v=6.2';
-import { staffingTable, reasonsFor } from '../outlook.js?v=6.2';
+} from '../model.js?v=6.3';
+import { record, undo, redo, nextUndo, nextRedo } from '../history.js?v=6.3';
+import { weekdayOf, WEEKDAY_LABELS } from '../calendar.js?v=6.3';
+import { notify } from '../dialog.js?v=6.3';
+import { checkTable } from '../check.js?v=6.3';
+import { screenTitle } from './common.js?v=6.3';
+import { staffGrid } from './staffgrid.js?v=6.3';
+import { needGrid } from './needgrid.js?v=6.3';
+import { markIndex, markClasses, markBadges, countBand, errorList, worsened } from './checkview.js?v=6.3';
+import { currentPreview, previewCard, openRepair, openRestart, repairBlockReason } from './repairview.js?v=6.3';
+import { summarize, summaryColumns } from '../summary.js?v=6.3';
+import { exportCsv, exportExcel } from '../files.js?v=6.3';
+import { staffingTable, reasonsFor } from '../outlook.js?v=6.3';
 
 const SVG = 'http://www.w3.org/2000/svg';
 const NL = String.fromCharCode(10); // マウスを置いたときの文の改行

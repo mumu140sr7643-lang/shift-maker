@@ -1,13 +1,13 @@
 // Excel に出す（4-3）。ExcelJS（vendor/exceljs、MIT）を、「Excel に出す」を押したときだけ読み込む（最初の画面を軽くするため）。
 // シート：シフト表（マスの記号と、シフトの「Excel に出すときの色」）・集計表・件数（件数とエラーの一覧）。
 // 文字は文字として入れる（式にはしない）ので、= などで始まる名前も式として読まれない。
-import { monthDays, cellOf, cellSymbol, shiftById, REST_KINDS } from './model.js?v=6.2';
-import { weekdayOf, WEEKDAY_LABELS } from './calendar.js?v=6.2';
-import { checkTable } from './check.js?v=6.2';
-import { RULE_BY_ID } from './rules.js?v=6.2';
-import { summarize, summaryColumns } from './summary.js?v=6.2';
+import { monthDays, cellOf, cellSymbol, shiftById, REST_KINDS } from './model.js?v=6.3';
+import { weekdayOf, WEEKDAY_LABELS } from './calendar.js?v=6.3';
+import { checkTable } from './check.js?v=6.3';
+import { RULE_BY_ID } from './rules.js?v=6.3';
+import { summarize, summaryColumns } from './summary.js?v=6.3';
 
-const EXCELJS_URL = new URL('../../vendor/exceljs/exceljs.bare.min.js?v=6.2', import.meta.url).href;
+const EXCELJS_URL = new URL('../../vendor/exceljs/exceljs.bare.min.js?v=6.3', import.meta.url).href;
 const XLSX_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 // 休みなどの色（画面の明るい表示と同じ）
 const REST_COLORS = { off: '#ECEEF1', paid: '#DFF1E3', half: '#EAF4DC', ake: '#E4E4E4', spare: '#D9F1EE' };

@@ -1,20 +1,20 @@
 // 手順5 自動で作る：1分で作る（おためし）・じっくり作る（本番）。計算は裏方（solver/worker.js の Web Worker）で行うので、画面は固まらない。
 // 計算は写しで行い、終わってから、そのあいだにデータが変わっていないことを確かめて本物の表に入れる。
-import { h, append } from '../dom.js?v=6.2';
-import { app, rerender, goStep } from '../state.js?v=6.2';
-import { record, undo, nextUndo } from '../history.js?v=6.2';
-import { canonicalJSON, clone, applyGenerated } from '../model.js?v=6.2';
-import { checkTable, solveConflicts, unavoidableErrors } from '../check.js?v=6.2';
-import { RULE_BY_ID } from '../rules.js?v=6.2';
-import { ask, notify } from '../dialog.js?v=6.2';
-import { takeBackup, backupLines } from '../backup.js?v=6.2';
-import { timeLabel } from '../calendar.js?v=6.2';
-import { screenTitle } from './common.js?v=6.2';
-import { countBand } from './checkview.js?v=6.2';
-import { startSolving, startCarefulSolving, isSolving, quickSeconds, carefulSeconds, carefulWorkers } from './solving.js?v=6.2';
-import { candidateName } from '../solver/careful.js?v=6.2';
-import { outlookCard } from './outlookview.js?v=6.2';
-import { lowerBound, reachedLowerBound } from '../outlook.js?v=6.2';
+import { h, append } from '../dom.js?v=6.3';
+import { app, rerender, goStep } from '../state.js?v=6.3';
+import { record, undo, nextUndo } from '../history.js?v=6.3';
+import { canonicalJSON, clone, applyGenerated } from '../model.js?v=6.3';
+import { checkTable, solveConflicts, unavoidableErrors } from '../check.js?v=6.3';
+import { RULE_BY_ID } from '../rules.js?v=6.3';
+import { ask, notify } from '../dialog.js?v=6.3';
+import { takeBackup, backupLines } from '../backup.js?v=6.3';
+import { timeLabel } from '../calendar.js?v=6.3';
+import { screenTitle } from './common.js?v=6.3';
+import { countBand } from './checkview.js?v=6.3';
+import { startSolving, startCarefulSolving, isSolving, quickSeconds, carefulSeconds, carefulWorkers } from './solving.js?v=6.3';
+import { candidateName } from '../solver/careful.js?v=6.3';
+import { outlookCard } from './outlookview.js?v=6.3';
+import { lowerBound, reachedLowerBound } from '../outlook.js?v=6.3';
 
 // 元に戻すの履歴での呼び名（手順6 の「元に戻す」にも出る）
 const GENERATED_LABEL = '自動で作った表';
@@ -183,7 +183,7 @@ function modeCard(d) {
       'div',
       { class: 'modes', role: 'radiogroup', 'aria-label': '作り方' },
       option('quick', '1分で作る（おためし）', '1分ほどで作ります。まず形を見たいときに。', false, 'mode-quick'),
-      option('careful', 'じっくり作る（本番。最大10分ほど）', carefulWorkers(d) > 1 ? '最大10分ほどかかります。いちばん良い答えを、何通りかで探します。' : '最大10分ほどかかります。1分で作った答えを、時間いっぱいまで直していき、いちばん良い答えを選びます。', false, 'mode-careful'),
+      option('careful', 'じっくり作る（本番。最大10分ほど）', carefulWorkers(d) > 1 ? `最大10分ほどかかります。${carefulWorkers(d)}通りの作り方で同時に探し、いちばん良い答えを選びます。` :'最大10分ほどかかります。1分で作った答えを、時間いっぱいまで直していき、いちばん良い答えを選びます。', false, 'mode-careful'),
     ),
   );
 }
@@ -300,7 +300,7 @@ function resultCard(d) {
     { class: 'card', testid: 'run-result', dataset: { finished: String(Boolean(r.finished)), mode: careful ? 'careful' : 'quick' } },
     h('h2', { text: '作った結果' }),
     h('p', { testid: 'run-when', text: `${when}${how}` }),
-    h('p', { testid: 'run-status', text: careful && !r.finished ? (count > 1 ? '時間内に見つけたいちばん良い答えです（何通りかで探して、決めた順番でいちばん良いものを選びました）。' : '時間内に見つけたいちばん良い答えです（1分の答えを直していき、決めた順番でいちばん良いものを選びました）。') : status }),
+    h('p', { testid: 'run-status', text: careful && !r.finished ? (count > 1 ? `時間内に見つけたいちばん良い答えです（${count}通りの作り方で探して、決めた順番でいちばん良いものを選びました）。` :'時間内に見つけたいちばん良い答えです（1分の答えを直していき、決めた順番でいちばん良いものを選びました）。') : status }),
     careful ? carefulLines(r) : null,
     h('h3', { text: 'いまのシフト表の件数' }),
     countBand(res),

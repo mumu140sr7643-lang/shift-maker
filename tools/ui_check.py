@@ -1259,7 +1259,7 @@ def help_says(page, want):
         return False
     if want == 1:
         return "時間いっぱいまで直していき" in help_text and "通り" not in help_text and "時間いっぱいまで直していき" in mode_text and "通り" not in mode_text
-    return f"{want}通り同時に" in help_text and "何通りかで探します" in mode_text
+    return f"{want}通り同時に" in help_text and f"{want}通りの作り方で同時に探し" in mode_text and "何通り" not in mode_text
 
 
 def scenario_careful(browser, base):
@@ -1268,15 +1268,15 @@ def scenario_careful(browser, base):
     url = base + "/app/?careful=20&seconds=5"
     # 1. Worker の数（docs/じっくり作る案.md の 4 章）。1本のメモリの見込み m（careful.js の workerMemoryMB）は、50人×31日までの月で 1788MB、100人×31日で 2813MB。
     #    使ってよいメモリは deviceMemory の 4分の1（分からないときは、パソコン 2GB）を m で割った数まで。ほかに CPU の数 − 1・4本まで・deviceMemory 2 以下で1本・4 以下で2本まで
-    #    8GB 以下の機械は 1本（候補 あ だけ）、16GB は 2本、32GB 以上は 4本（Chrome・Edge は 16GB のパソコンで deviceMemory を 16 と言う）
-    #    見本（飲食店）：CPU 1・2・4・16（8GB）→ どれも 1本、メモリ 2・4・分からない → 1本、メモリ 16 → 2本、32 → CPU 4 で 3本・CPU 16 で 4本
-    cases = [({"cpus": 1, "mem": 8}, 1), ({"cpus": 2, "mem": 8}, 1), ({"cpus": 4, "mem": 8}, 1), ({"cpus": 16, "mem": 8}, 1), ({"cpus": 16, "mem": 2}, 1), ({"cpus": 16, "mem": 4}, 1), ({"cpus": 16, "mem": None}, 1), ({"cpus": 16, "mem": 16}, 2), ({"cpus": 4, "mem": 32}, 3), ({"cpus": 16, "mem": 32}, 4)]
+    #    8GB 以下の機械は 1本（候補 あ だけ）、16GB 以上は 2本（6-3 で候補が あ・い2 の2つになったため。6-2 では 32GB 以上は 4本。Chrome・Edge は 16GB のパソコンで deviceMemory を 16 と言う）
+    #    見本（飲食店）：CPU 1・2・4・16（8GB）→ どれも 1本、メモリ 2・4・分からない → 1本、メモリ 16 → 2本、32 → CPU 4・CPU 16 とも 2本
+    cases = [({"cpus": 1, "mem": 8}, 1), ({"cpus": 2, "mem": 8}, 1), ({"cpus": 4, "mem": 8}, 1), ({"cpus": 16, "mem": 8}, 1), ({"cpus": 16, "mem": 2}, 1), ({"cpus": 16, "mem": 4}, 1), ({"cpus": 16, "mem": None}, 1), ({"cpus": 16, "mem": 16}, 2), ({"cpus": 4, "mem": 32}, 2), ({"cpus": 16, "mem": 32}, 2)]
     got = []
     for env, want in cases:
         ctx, page, errors = careful_page(browser, base, url, env=env)
         got.append((env, want, help_says(page, want)))
         ctx.close()
-    ok(all(g for _, _, g in got), "じっくり作るの Worker の数が CPU の数・メモリで決まり、説明の言葉も合う（見本の月。8GB 以下・分からない は 1本で「何通り」と書かない、16 → 2本、32 → 3・4本）", json.dumps([(e, w) for e, w, g in got if not g]))
+    ok(all(g for _, _, g in got), "じっくり作るの Worker の数が CPU の数・メモリで決まり、説明の言葉も合う（見本の月。8GB 以下・分からない は 1本で「何通り」と書かない、16・32 → 2本で「2通りの作り方で同時に探し」）", json.dumps([(e, w) for e, w, g in got if not g]))
     # 月の大きさ（15人×31日・50人×31日・100人×31日）：50人×31日までは 16 → 2本・32 → 4本。100人×31日は見込みが大きくなるので 16 → 1本・32 → 2本
     month_text = {}
     for staff in [15, 50, 100]:
@@ -1285,7 +1285,7 @@ def scenario_careful(browser, base):
             capture_output=True, text=True, encoding="utf-8", check=True,
         ).stdout
     got = []
-    month_cases = [(15, 8, 1), (15, 16, 2), (15, 32, 4), (50, 8, 1), (50, 16, 2), (50, 32, 4), (100, 8, 1), (100, None, 1), (100, 16, 1), (100, 32, 2)]
+    month_cases = [(15, 8, 1), (15, 16, 2), (15, 32, 2), (50, 8, 1), (50, 16, 2), (50, 32, 2), (100, 8, 1), (100, None, 1), (100, 16, 1), (100, 32, 2)]
     for staff, mem, want in month_cases:
         env = {"cpus": 16, "mem": mem}
         ctx, page, errors = careful_month_page(browser, base, url, month_text[staff], env)
@@ -1361,18 +1361,20 @@ def scenario_careful(browser, base):
     ok(not errors, "エラー0 じっくり作る", " / ".join(errors[:3]))
     ctx.close()
 
-    # 4b. 4通り同時（メモリ 32GB の機械として）：最後まで作ると候補 4つの記録が残り、Worker は 0本
+    # 4b. 2通り同時（メモリ 32GB の機械として。6-3 で候補が2つになったので、32GB でも 2本）：最後まで作ると候補 2つの記録が残り、Worker は 0本
     ctx, page, errors = careful_page(browser, base, url, env={"cpus": 16, "mem": 32})
     t(page, "generate").click()
     page.wait_for_selector('[data-testid="run-dialog"]')
-    ok(t(page, "run-dialog").get_attribute("data-workers") == "4", "メモリ 32GB・CPU 16 なら 4通り同時に探す", t(page, "run-dialog").get_attribute("data-workers"))
+    ok(t(page, "run-dialog").get_attribute("data-workers") == "2", "メモリ 32GB・CPU 16 なら 2通り同時に探す", t(page, "run-dialog").get_attribute("data-workers"))
+    page.wait_for_selector('[data-testid="run-stage"][data-phase="search"]', timeout=30000)
+    ok("2通りの作り方で同時に" in t(page, "run-stage").inner_text(), "2通りのとき、小窓に「2通りの作り方で同時に、より良い答えを探しています」と出る", t(page, "run-stage").inner_text())
     page.wait_for_selector('[data-testid="run-result"]', timeout=90000)
     page.wait_for_timeout(500)
     run = json.loads(stored(page))["month"]["runs"][-1]
-    ok(len(run["candidates"]) == 4 and "4通り" in t(page, "run-when").inner_text() and "何通りかで探して" in t(page, "run-status").inner_text(), "4通りで作った記録に、候補 4つの結果が残り、結果に「4通り」「何通りかで探して」と出る", t(page, "run-when").inner_text()[:60])
+    ok(len(run["candidates"]) == 2 and "2通り" in t(page, "run-when").inner_text() and "2通りの作り方で探して" in t(page, "run-status").inner_text() and "何通り" not in t(page, "run-status").inner_text(), "2通りで作った記録に、候補 2つの結果が残り、結果に「2通り」「2通りの作り方で探して」と出る", t(page, "run-when").inner_text()[:60])
     left = workers_left(page)
-    ok(left == 0, "4通りで作り終えたあと、動いている Worker が 0本（5秒まで待つ）", str(left))
-    ok(not errors, "エラー0 じっくり作る（4通り）", " / ".join(errors[:3]))
+    ok(left == 0, "2通りで作り終えたあと、動いている Worker が 0本（5秒まで待つ）", str(left))
+    ok(not errors, "エラー0 じっくり作る（2通り）", " / ".join(errors[:3]))
     ctx.close()
 
     # 5. スマホの幅・暗い表示で、計算中の小窓が読める

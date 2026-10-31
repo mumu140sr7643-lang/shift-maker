@@ -1,11 +1,11 @@
 // 計算中の小窓と、裏方（solver/worker.js の Web Worker）とのやり取り。
 // 手順5 の自動で作る（1分・じっくり）・手順6 のエラーを自動で直す・途中から作り直す で同じものを使う。
 // 計算は写しで行うので、中止しても表は前のまま。計算中は小窓がほかの操作を止める。
-import { h } from '../dom.js?v=6.2';
-import { rerender } from '../state.js?v=6.2';
-import { notify } from '../dialog.js?v=6.2';
-import { startCareful, workerCount, CAREFUL_SECONDS } from '../solver/careful.js?v=6.2';
-import { monthDays } from '../model.js?v=6.2';
+import { h } from '../dom.js?v=6.3';
+import { rerender } from '../state.js?v=6.3';
+import { notify } from '../dialog.js?v=6.3';
+import { startCareful, workerCount, CAREFUL_SECONDS } from '../solver/careful.js?v=6.3';
+import { monthDays } from '../model.js?v=6.3';
 
 export const QUICK_SECONDS = 60;
 
@@ -71,7 +71,7 @@ export function startSolving({ payload, seconds, title, stageText = defaultStage
   if (job) return;
   let worker;
   try {
-    worker = new Worker(new URL('../solver/worker.js?v=6.2', import.meta.url), { type: 'module' });
+    worker = new Worker(new URL('../solver/worker.js?v=6.3', import.meta.url), { type: 'module' });
   } catch {
     notify('計算の部品を動かせませんでした。ページを読み込み直して、もう一度ためしてください。', { kind: 'error', testid: 'run-error' });
     return;
@@ -125,7 +125,7 @@ export function startCarefulSolving({ data, seed, onResult }) {
   const workers = carefulWorkers(data);
   const phaseText = {
     quick: '1分の答えを作っています（保険）',
-    search: workers > 1 ? `何通りかで、より良い答えを探しています（${workers}通り同時）` : '1分の答えから、より良い答えを探しています',
+    search: workers > 1 ? `${workers}通りの作り方で同時に、より良い答えを探しています` :'1分の答えから、より良い答えを探しています',
     finish: '仕上げをしています',
   };
   const stage = h('p', { class: 'run-stage', testid: 'run-stage', dataset: { phase: 'quick' }, text: phaseText.quick });
@@ -159,7 +159,7 @@ export function startCarefulSolving({ data, seed, onResult }) {
   document.body.appendChild(dlg);
   dlg.showModal();
   const makeWorker = () => {
-    const w = new Worker(new URL('../solver/worker.js?v=6.2', import.meta.url), { type: 'module' });
+    const w = new Worker(new URL('../solver/worker.js?v=6.3', import.meta.url), { type: 'module' });
     return {
       post: (m) => w.postMessage(m),
       onMessage: (fn) => {

@@ -895,13 +895,13 @@ const check = (name, problems) => results.push({ name, problems });
 {
   const problems = [];
   // Worker の数（4 章）。1本の見込み m は 50人×31日までの月で 1788MB、100人×31日で 2813MB。使ってよいメモリ（deviceMemory の 4分の1。
-  // 分からないときは、タッチだけの機械 1GB・パソコン 2GB）を m で割った数まで。8GB 以下の機械は 1本・16GB は 2本・32GB 以上は 4本
+  // 分からないときは、タッチだけの機械 1GB・パソコン 2GB）を m で割った数まで。8GB 以下の機械は 1本・16GB 以上は 2本（6-3 で候補が あ・い2 の2つになったため。6-2 では 32GB 以上は 4本）
   const big = 100 * 31;
   const cases = [
     [{ cpus: 1 }, 1], [{ cpus: 2 }, 1], [{ cpus: 4 }, 1], [{ cpus: 16 }, 1], [{}, 1],
-    [{ cpus: 16, memory: 2 }, 1], [{ cpus: 16, memory: 4 }, 1], [{ cpus: 16, memory: 8 }, 1], [{ cpus: 16, memory: 16 }, 2], [{ cpus: 4, memory: 32 }, 3], [{ cpus: 16, memory: 32 }, 4],
+    [{ cpus: 16, memory: 2 }, 1], [{ cpus: 16, memory: 4 }, 1], [{ cpus: 16, memory: 8 }, 1], [{ cpus: 16, memory: 16 }, 2], [{ cpus: 4, memory: 32 }, 2], [{ cpus: 16, memory: 32 }, 2],
     [{ cpus: 16, touchOnly: true }, 1], [{ cpus: 16, memory: 8, touchOnly: true }, 1], [{ cpus: 2, touchOnly: true }, 1], [{ cpus: 16, memory: 32, touchOnly: true }, 2],
-    [{ cpus: 16, memory: 8, cells: 50 * 31 }, 1], [{ cpus: 16, memory: 8, cells: big }, 1], [{ cpus: 16, cells: big }, 1], [{ cpus: 16, memory: 16, cells: 15 * 31 }, 2], [{ cpus: 16, memory: 16, cells: 50 * 31 }, 2], [{ cpus: 16, memory: 16, cells: big }, 1], [{ cpus: 16, memory: 32, cells: 50 * 31 }, 4], [{ cpus: 16, memory: 32, cells: big }, 2],
+    [{ cpus: 16, memory: 8, cells: 50 * 31 }, 1], [{ cpus: 16, memory: 8, cells: big }, 1], [{ cpus: 16, cells: big }, 1], [{ cpus: 16, memory: 16, cells: 15 * 31 }, 2], [{ cpus: 16, memory: 16, cells: 50 * 31 }, 2], [{ cpus: 16, memory: 16, cells: big }, 1], [{ cpus: 16, memory: 32, cells: 50 * 31 }, 2], [{ cpus: 16, memory: 32, cells: big }, 2],
   ];
   for (const [env, want] of cases) if (workerCount(env) !== want) problems.push(`Worker の数 ${JSON.stringify(env)} → ${workerCount(env)}（${want} のはず）`);
   for (const [cells, want] of [[0, 1788], [15 * 31, 1788], [50 * 31, 1788], [big, 2813]]) {
@@ -944,15 +944,15 @@ const check = (name, problems) => results.push({ name, problems });
   };
   const tick = () => new Promise((r) => setTimeout(r, 0));
   {
-    // あ が1分の答え（悪いほう）、い が良いほう → い を選ぶ。全部終わったら done
+    // あ が1分の答え（悪いほう）、い2 が良いほう → い2 を選ぶ。全部終わったら done
     const f = fake((m, send) => {
       if (m.role === 'a') send({ type: 'answer', role: 'a', label: 'quick', table: worse, stages: [] });
-      if (m.role === 'i') send({ type: 'answer', role: 'i', label: 'stage', table: better, stages: [] });
+      if (m.role === 'i2') send({ type: 'answer', role: 'i2', label: 'stage', table: better, stages: [] });
       send({ type: 'end', role: m.role, stages: [{ key: 'soft', name: 'x', status: 'solved', seconds: 1 }] });
     });
     const job = startCareful(d, { makeWorker: f.makeWorker, workers: 2, seconds: 600, setTimer: f.setTimer, clearTimer: f.clearTimer });
     const r = await job.promise;
-    if (!r.ok || r.picked.role !== 'i' || r.how !== 'done' || r.count !== 2) problems.push(`いちばん良い答えを選ばない（${JSON.stringify(r.picked)} ${r.how}）`);
+    if (!r.ok || r.picked.role !== 'i2' || r.how !== 'done' || r.count !== 2) problems.push(`いちばん良い答えを選ばない（${JSON.stringify(r.picked)} ${r.how}）`);
     if (!r.quick || r.quick.totals.soft <= C.checkTable({ ...d, month: { ...d.month, table: r.table } }).totals.soft) problems.push('1分の答えの件数を残していない・選んだ答えのほうが悪い');
     if (!f.made.every((w) => w.terminated)) problems.push('終わったあとに Worker を止めていない');
     if (f.timers.find((x) => x.ms === 620000) === undefined) problems.push('時間の見張りが 600＋20秒でない');
@@ -987,12 +987,12 @@ const check = (name, problems) => results.push({ name, problems });
     const f = fake((m, send, fail) => fail());
     const r = await startCareful(d, { makeWorker: f.makeWorker, workers: 2, setTimer: f.setTimer, clearTimer: f.clearTimer }).promise;
     if (r.ok || r.reason !== 'lost') problems.push(`全部止まったのに「計算の部品が止まりました」にならない（${r.reason}）`);
-    const g = fake((m, send) => m.role === 'i' && send({ type: 'answer', role: 'i', label: 'stage', table: better, stages: [] }));
+    const g = fake((m, send) => m.role === 'i2' && send({ type: 'answer', role: 'i2', label: 'stage', table: better, stages: [] }));
     const job = startCareful(d, { makeWorker: g.makeWorker, workers: 2, setTimer: g.setTimer, clearTimer: g.clearTimer });
     await tick();
     g.timers.find((x) => x.ms === 620000).fn();
     const r2 = await job.promise;
-    if (!r2.ok || r2.how !== 'timeout' || r2.picked.role !== 'i' || !g.made.every((w) => w.terminated)) problems.push(`時間の見張りで、届いた答えから選ばない（${r2.how}）`);
+    if (!r2.ok || r2.how !== 'timeout' || r2.picked.role !== 'i2' || !g.made.every((w) => w.terminated)) problems.push(`時間の見張りで、届いた答えから選ばない（${r2.how}）`);
   }
 
   // 候補 う の式（時間帯の切り替え回数・責任者の順位）の量が check.js の数と同じか：

@@ -1,10 +1,10 @@
 // じっくり作る（6-2。docs/じっくり作る案.md）の中身。画面には触らない。node からも使う。
 // まとめ役（startCareful。画面の側）が Worker を何本か作り、Worker の側（runCandidate）が候補ごとに解いて、良い答えを送る。
 // Worker を作る関数を渡すので、ブラウザでは Web Worker、node の道具では worker_threads で、同じ中身が動く。
-import { solveStaged } from './stages.js?v=6.2';
-import { prepareRepair } from './repair.js?v=6.2';
-import { finishTable } from './finish.js?v=6.2';
-import { checkTable, isImproved, compareResults } from '../check.js?v=6.2';
+import { solveStaged } from './stages.js?v=6.3';
+import { prepareRepair } from './repair.js?v=6.3';
+import { finishTable } from './finish.js?v=6.3';
+import { checkTable, isImproved, compareResults } from '../check.js?v=6.3';
 
 export const CAREFUL_SECONDS = 600;
 // 時間の見張り：合計＋20秒たっても終わらない Worker は止める
@@ -13,17 +13,17 @@ const WATCH_EXTRA = 20;
 const REPAIR_BUDGETS = [10, 25, 50];
 const REPAIR_SECONDS = 20;
 const REPAIR_SEED = 10;
-// い・う・い2 の「できれば」の段を区切って解く1回の秒（stages.js の solveInRounds。1回の HiGHS のメモリを上限より小さく保つ。
+// い2（6-2 では い・う も）の「できれば」の段を区切って解く1回の秒（stages.js の solveInRounds。1回の HiGHS のメモリを上限より小さく保つ。
 // 2026-10-31 確かめ役と決めた。区切ったあとの測り直し（600秒・3か月 × 4候補）で、止まった回 0・1回のいちばん多いメモリ 1430MB（上限 2GB より小さい）。
 // 6-2 の測り C・E（67e4dd0、18か月 × 3回）でも、止まった回 0・いちばん多いメモリ 1430MB だった）
 const SOFT_ROUND_SECONDS = 120;
 
 // 候補（Worker が少ない機械では、上から順に使う）。seedAdd は1分の答えの種に足す数
+// 6-3（docs/じっくり作る案.md 8-1。2026-11-01 確かめ役と決めた）：測り D の線（ほかのどの候補より良い回が 54回中 6回以上）のとおり、あ と い2 だけにした。
+// い（種 +1）と う（種 +2・exact）は外した。い2 の中身（種 +3）は測ったものと同じ。う の式（exact）は付けないときは何もしない形で残している（道具だけ）
 export const CANDIDATES = [
   { id: 'a', name: '1分から直しを重ねる' },
-  { id: 'i', name: '長く解く', seedAdd: 1 },
-  { id: 'u', name: '数え方に近い式', seedAdd: 2, exact: true },
-  { id: 'i2', name: '長く解く（別の種）', seedAdd: 3 },
+  { id: 'i2', name: '長く解く', seedAdd: 3 },
 ];
 export const candidateName = (id) => CANDIDATES.find((c) => c.id === id)?.name ?? id;
 
@@ -41,7 +41,8 @@ export function timePlan(seconds) {
 // いちばん多い値が MEMORY_MAX_MB、50人×31日の月のいちばん多い値が MEMORY_50_MB。
 // メモリは月の大きさより解く長さで増えるので、どの月も MEMORY_MAX_MB を見込み、50人×31日より大きい月だけ、式が大きくなる分を見込む。余裕に 1.25 倍。
 // 2026-10-31（確かめ役と決めた）：1430MB は 15人×30日の候補 い の WebAssembly のメモリ、1125MB は 50人×31日の候補 い2 の node の分を引いたメモリ。
-// m は 1788MB になり、8GB 以下の機械は1本（候補 あ だけ）・16GB は2本・32GB 以上は4本。い・う・い2 のメモリを減らすかは 6-3 で決める
+// m は 1788MB になり、8GB 以下の機械は1本（候補 あ だけ）・16GB 以上は2本（6-3 で候補が2つになったため。6-2 では 32GB 以上は4本）。
+// い2 のメモリを減らす直しは 6-3 で試す（8-4。m が 1024MB 以下になるときだけ本数を増やす）
 const MEMORY_MAX_MB = 1430;
 const MEMORY_50_MB = 1125;
 const CELLS_50 = 50 * 31;
@@ -50,7 +51,7 @@ export function workerMemoryMB(cells = 0) {
   return MEMORY_MARGIN * Math.max(MEMORY_MAX_MB, cells > CELLS_50 ? (MEMORY_50_MB * cells) / CELLS_50 : 0);
 }
 
-// Worker の数（4 章）：CPU の数 − 1（最大4本・少なくとも1本。分からなければ1本）。
+// Worker の数（4 章）：CPU の数 − 1（候補の数まで。6-3 では最大2本。少なくとも1本。分からなければ1本）。
 // deviceMemory が分かるときは 2GB 以下で1本・4GB 以下で2本まで。タッチだけの機械は2本まで。
 // さらに、使ってよいメモリ（deviceMemory の 4分の1。分からないときは、タッチだけの機械 1GB・それ以外 2GB）を、1本の見込みで割った数まで
 export function workerCount({ cpus, memory, touchOnly, cells = 0 }) {
@@ -123,7 +124,7 @@ export async function runCandidate(data, { role, seed, seconds = CAREFUL_SECONDS
     return;
   }
 
-  // い・う・い2：段の順番は1分と同じで、長い時間で解く。段が終わるたび・「できれば」の段の回ごとの表を答えとして出す
+  // い2（6-2 では い・う も）：段の順番は1分と同じで、長い時間で解く。段が終わるたび・「できれば」の段の回ごとの表を答えとして出す
   const r = await solveStaged(data, {
     loadHighs,
     timeLimit: plan.search,
@@ -234,7 +235,7 @@ export function startCareful(data, { makeWorker, workers = 4, seconds = CAREFUL_
       if (m.role !== 'a' || !s.stages.length) s.stages = m.stages ?? s.stages;
       s.rounds = m.rounds ?? null;
       s.moves = m.moves ?? 0;
-      // 測り F（締め直し）のため：段の量と、その段の答えの表（い・う・い2）
+      // 測り F（締め直し）のため：段の量と、その段の答えの表（あ 以外の候補）
       s.amounts = m.amounts ?? null;
       s.solverTable = m.solverTable ?? null;
       s.reason = m.reason ?? null;
