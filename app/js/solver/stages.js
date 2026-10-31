@@ -1,6 +1,6 @@
 // 段階的に解く（docs/自動で作る案.md の 4・5 章）。HiGHS を読み込む関数を渡せば、ブラウザでも node でも同じに動く。
-import { buildModel } from './build.js?v=4.3';
-import { solveConflicts } from '../check.js?v=4.3';
+import { buildModel } from './build.js?v=5.1';
+import { solveConflicts } from '../check.js?v=5.1';
 
 // HiGHS の答えの状態の番号
 const OPTIMAL = 7;

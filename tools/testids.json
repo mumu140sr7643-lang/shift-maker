@@ -986,5 +986,37 @@
  {
   "id": "summary-section",
   "find": "summary-section"
+ },
+ {
+  "id": "margin-row",
+  "find": "margin-row"
+ },
+ {
+  "id": "margin-summary",
+  "find": "margin-summary"
+ },
+ {
+  "id": "tight-notice",
+  "find": "tight-notice"
+ },
+ {
+  "id": "tight-undo",
+  "find": "tight-undo"
+ },
+ {
+  "id": "outlook-details",
+  "find": "outlook-details"
+ },
+ {
+  "id": "margin-table",
+  "find": "margin-table"
+ },
+ {
+  "id": "zero-days",
+  "find": "zero-days"
+ },
+ {
+  "id": "zero-days-none",
+  "find": "zero-days-none"
  }
 ]

@@ -20,6 +20,7 @@ import { prepareRepair, prepareRestart, solveRepair, tableChanges } from '../app
 import { checkProposal } from './repair.mjs';
 import { summarize } from '../app/js/summary.js';
 import { csvCell, toCsv, shiftTableRows } from '../app/js/csv.js';
+import { dayMargins, tightRanges, newTightness } from '../app/js/outlook.js';
 
 const results = [];
 const check = (name, problems) => results.push({ name, problems });
@@ -705,6 +706,53 @@ const check = (name, problems) => results.push({ name, problems });
   const rows = shiftTableRows(d);
   if (rows.length !== 3 || rows[1][0] !== 'A' || rows[1][1] !== '早' || rows[1][5] !== '半' || rows[2][0] !== '合計') problems.push('CSV のシフト表の形が合わない');
   check('集計表（数え方の表 1 章）と CSV（BOM・式にならない・カンマ・改行）', problems);
+}
+
+// 18. 日ごとの余裕・あと何人休めるか・きつい期間（outlook.js）（5-1）
+{
+  const problems = [];
+  const d = M.emptyData(2026, 11, 'blank');
+  const one = { full: 0, part: 0, all: 1 };
+  const zero = { full: 0, part: 0, all: 0 };
+  const E = M.newShift(d, { symbol: '早', name: '早', group: 'early', combine: true, need: { ...one } });
+  const L = M.newShift(d, { symbol: '遅', name: '遅', group: 'late', combine: true, need: { ...one } });
+  const T = M.newShift(d, { symbol: '研', name: '研修', group: 'early', training: true, counts: false, combine: true, need: { ...zero } });
+  const Nt = M.newShift(d, { symbol: '夜', name: '夜', group: 'night', night: true, combine: true, need: { ...zero } });
+  d.settings.shifts = [E, L, T, Nt];
+  const k1 = M.newSkill(d, { name: 'k1' });
+  d.settings.skills = [k1];
+  const A = M.newStaff(d, { name: 'A', shifts: [E.id, L.id], skills: [k1.id] });
+  const B = M.newStaff(d, { name: 'B', shifts: [E.id, L.id, Nt.id] });
+  const Cc = M.newStaff(d, { name: 'C', shifts: [E.id, T.id] });
+  const D = M.newStaff(d, { name: 'D', shifts: [T.id] });
+  d.staff = [A, B, Cc, D];
+  const before = dayMargins(d);
+  if (before.some((m) => m.margin !== 1 || m.available !== 3 || m.need !== 2)) problems.push('はじめの余裕が 3人 − 2人 ＝ 1 にならない（人数に数えないシフトだけの人を数えた など）');
+  if (JSON.stringify(tightRanges(before)) !== JSON.stringify([{ from: 1, to: 30 }])) problems.push('1 以下が続く月が、1つのきつい期間にならない');
+  M.setRequest(d, A.id, 3, { kind: 'off' }); // 休みの希望
+  d.month.table[Cc.id] = { 4: { kind: 'paid' } };
+  d.month.marks[Cc.id] = { 4: { locked: true } }; // 有給に固定
+  M.setRequest(d, Cc.id, 5, { kind: 'shift', shift: T.id }); // 研修に決まっている（人数に数えない）
+  M.setRequest(d, B.id, 6, { kind: 'half' }); // 半休
+  M.setRequest(d, B.id, 7, { kind: 'shift', shift: Nt.id }); // 決まった夜勤 → 8日は明け
+  d.month.marks[A.id] = { 9: { locked: true } }; // 空きのまま固定
+  d.month.dailySkill[E.id] = { 10: [k1.id] }; // 10日の早は k1 が要る → C は出られない
+  const after = dayMargins(d);
+  const want = { 3: 0, 4: 0, 5: 0, 6: 0, 7: 1, 8: 0, 9: 0, 10: 0, 11: 1 };
+  for (const [day, m] of Object.entries(want)) if (after[day - 1].margin !== m) problems.push(`${day}日のあと何人休めるかが ${after[day - 1].margin}（${m} のはず）`);
+  const n = newTightness(before, after);
+  if (JSON.stringify(n.zeroDays) !== JSON.stringify([3, 4, 5, 6, 8, 9, 10]) || n.ranges.length) problems.push(`新しくできた 0 人の日が ${JSON.stringify(n.zeroDays)}`);
+  const mk = (arr) => arr.map((m, i) => ({ day: i + 1, margin: m }));
+  const nt = newTightness(mk([3, 3, 3, 3]), mk([3, 1, 1, 3]));
+  if (JSON.stringify(nt.ranges) !== JSON.stringify([{ from: 2, to: 3 }]) || nt.zeroDays.length) problems.push('新しくできたきつい期間を見つけない');
+  if (newTightness(mk([1, 1, 3]), mk([1, 1, 1])).ranges.length !== 1 || newTightness(mk([1, 1, 1]), mk([1, 1, 3])).ranges.length) problems.push('広がったきつい期間・縮んだきつい期間の扱いが違う');
+  // 速さ：50人 × 31日で、1回ずつ数えて 1回 100ms 以内が目安（ここでは、ゆるく 300ms を超えたら知らせる）
+  const big = await makeSample({ seed: 41, staff: 50, year: 2026, month: 12 });
+  const t0 = performance.now();
+  for (let i = 0; i < 5; i += 1) dayMargins(big);
+  const ms = (performance.now() - t0) / 5;
+  if (ms > 300) problems.push(`50人 × 31日のあと何人休めるかに ${Math.round(ms)}ms かかる`);
+  check(`日ごとの余裕・きつい期間（50人×31日で 1回 ${Math.round(ms * 10) / 10}ms）`, problems);
 }
 
 // 10. 言葉の確かめ：一覧の言葉が、リポジトリのファイル・コミットの文に入っていないか

@@ -1,7 +1,7 @@
 // エラーを自動で直す・途中から作り直す（4-2。docs/自動で直す案.md）の中身。画面には触らない。node からも使う。
-import { solveStaged } from './stages.js?v=4.3';
-import { checkTable, isImproved, solveConflicts } from '../check.js?v=4.3';
-import { clone, cellOf, monthDays, shiftById } from '../model.js?v=4.3';
+import { solveStaged } from './stages.js?v=5.1';
+import { checkTable, isImproved, solveConflicts } from '../check.js?v=5.1';
+import { clone, cellOf, monthDays, shiftById } from '../model.js?v=5.1';
 
 // 変えてよいマスの数の上限（null は全部）
 export const REPAIR_BUDGETS = [10, 25, 50, null];

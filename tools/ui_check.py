@@ -20,6 +20,7 @@
   - 検査の画面（空の表の案内・6連勤以上の印と「悪くなりました」・一覧から動く・配置した人数・件数の帯と印が tools/count.mjs と同じ）
   - 決まりの強さ（手順1のチェックと1つの値・強さで件数が移る）と、希望だけで必ずエラーになるものの知らせ
   - 保存データが読めないとき、控えを残して知らせるか
+  - あと何人休めるか（手順4 の下の行の数・色・文・きつい期間）・その場の知らせ（取り消す・元に戻ったら消える）・手順5 の日ごとの余裕
   - Excel に出す（マスの記号と色・集計表・件数が画面と同じ・式が入らない）・CSV に出す（BOM・式にならない・カンマと引用符）・手順6 の集計表・ファイルの名前
   - エラーを自動で直す（上限ごとの案・表で見る・反映・元に戻す・必ず変えるマスが多い上限）と、途中から作り直す（残す日は同じ・元に戻せる・残す日に担当外があれば止める）
   - 元に戻す・やり直す（マス・入れ替え・必要人数・自動で作った表。1文字も同じに戻る・読み直すと履歴は消える）と、同じ日の2人の入れ替え（ドラッグ・小窓・固定は入れ替えない）
@@ -1634,6 +1635,63 @@ def scenario_export(browser, base):
     ctx.close()
 
 
+def scenario_margin(browser, base):
+    """5-1：手順4 のあと何人休めるか（数・色・文）・きつい期間・その場の知らせ（取り消す・元に戻ったら消える）・手順5 の日ごとの余裕"""
+    for width, scheme in [(1280, "light"), (375, "dark")]:
+        ctx, page, errors = fresh_page(browser, base, width, scheme)
+        t(page, "sample-restaurant").click()
+        go(page, 4, width)
+        cells = page.locator('[data-testid="margin-row"] td')
+        want = page.evaluate(
+            """async () => {
+              const v = document.querySelector('[data-testid="app-version"]').textContent.replace('版 ', '');
+              const O = await import(`./js/outlook.js?v=${v}`);
+              return O.dayMargins(JSON.parse(localStorage.getItem('shift-maker:data'))).map((m) => String(m.margin));
+            }"""
+        )
+        got = [cells.nth(i).inner_text() for i in range(cells.count())]
+        ok(got == want and len(got) >= 28, f"{scheme} {width}px 手順4 のいちばん下の行が、あと何人休めるか（outlook.js と同じ）", f"{got[:5]} / {want[:5]}")
+        # 11日に休みの希望を重ねて 0 人にする
+        page.locator('[data-testid="brush"][data-brush="off"]').click()
+        day = 11
+        start = int(want[day - 1])
+        for r in range(start):
+            page.locator(f'[data-testid="request-cell"][data-row="{3 + r}"][data-day="{day}"]').click()
+        cell = page.locator(f'[data-testid="margin-row"] td[data-day="{day}"]')
+        ok(cell.inner_text() == "0" and "mg-zero" in (cell.get_attribute("class") or "") and "出られる人" in (cell.get_attribute("title") or ""), f"{scheme} {width}px 0 の日は赤系で、マウスを置くと出られる人と必要人数が出る", cell.inner_text())
+        notice = t(page, "tight-notice")
+        ok(notice.count() >= 1 and "休める人が0人になります" in notice.first.inner_text() and "希望を入れたため" in notice.first.inner_text(), f"{scheme} {width}px 新しく0人の日ができたら、何を変えたからかを書いて知らせる", notice.first.inner_text()[:60] if notice.count() else "")
+        ok("休める人が0人の日" in t(page, "margin-summary").inner_text(), f"{scheme} {width}px 表の下に、0人の日を文でも出す")
+        look(page, f"{scheme} {width}px 手順4 あと何人休めるか", f"step4-margin-{scheme}-{width}")
+        before = stored(page)
+        t(page, "tight-undo").first.click()
+        data = json.loads(stored(page))
+        ok(t(page, "tight-notice").count() == 0 and cell.inner_text() == "1", f"{scheme} {width}px 「この希望を取り消す」で希望が消え、知らせも消える", f"{t(page, 'tight-notice').count()} {cell.inner_text()}")
+        ok(before != stored(page), "取り消すと、データも元に戻る")
+        # 元に戻ったら消える：もう一度 0 にしてから、別の人の希望を消して 1 に戻す
+        page.locator(f'[data-testid="request-cell"][data-row="{3 + start - 1}"][data-day="{day}"]').click()
+        ok(t(page, "tight-notice").count() == 1, f"{scheme} {width}px もう一度 0 人にすると、また知らせる")
+        page.locator(f'[data-testid="request-cell"][data-row="3"][data-day="{day}"]').click()
+        ok(t(page, "tight-notice").count() == 0, f"{scheme} {width}px 変えて元に戻ったら（0 人でなくなったら）、知らせが消える")
+        # きつい期間：12日も 1 以下にする
+        start12 = int(page.locator('[data-testid="margin-row"] td[data-day="12"]').inner_text())
+        for r in range(start12 - 1):
+            page.locator(f'[data-testid="request-cell"][data-row="{4 + r}"][data-day="12"]').click()
+        tight = page.locator('[data-testid="margin-row"] td.is-tight')
+        ok(tight.count() >= 2 and "あと1人以下の日が続きます" in t(page, "margin-summary").inner_text(), f"{scheme} {width}px 1 以下が2日以上続く所を枠で囲み、文でも出す", str(tight.count()))
+        ok(any("あと1人以下の日が続きます" in t(page, "tight-notice").nth(i).inner_text() for i in range(t(page, "tight-notice").count())), f"{scheme} {width}px 新しくできたきつい期間も知らせる")
+        # 手順5 の日ごとの余裕（11日をもう一度 0 人にしてから見る）
+        page.locator(f'[data-testid="request-cell"][data-row="3"][data-day="{day}"]').click()
+        go(page, 5, width)
+        page.locator('[data-testid="outlook-details"] > summary').click()
+        rows = page.locator('[data-testid="margin-table"] tbody tr')
+        ok(rows.count() >= 2 and rows.first.locator("th").inner_text() == "全体", f"{scheme} {width}px 手順5 の詳しい機能に、日ごとの余裕（全体・時間帯・スキル）が出る", str(rows.count()))
+        ok(t(page, "zero-days").count() == 1 and "全員出勤" in t(page, "zero-days").inner_text(), f"{scheme} {width}px 0人の日は、出勤になる人の名前と一緒に出す")
+        look(page, f"{scheme} {width}px 手順5 日ごとの余裕", f"step5-outlook-{scheme}-{width}")
+        ok(not errors, f"エラー0 あと何人休めるか {scheme} {width}px", " / ".join(errors[:3]))
+        ctx.close()
+
+
 def main():
     with Server() as srv, sync_playwright() as pw:
         base = f"http://127.0.0.1:{srv.port}"
@@ -1661,6 +1719,7 @@ def main():
         scenario_undo(browser, base)
         scenario_repair(browser, base)
         scenario_export(browser, base)
+        scenario_margin(browser, base)
         browser.close()
     print(json.dumps({"ブラウザ": CHANNEL or "chromium", "合格": len(results["pass"]), "不合格": results["fail"]}, ensure_ascii=False, indent=2))
     sys.exit(1 if results["fail"] else 0)

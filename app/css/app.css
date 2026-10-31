@@ -34,6 +34,8 @@
   --k-ake-bg: #e4e4e4;
   --k-spare-bg: #d9f1ee;
   --mk-six: #7a1010;
+  --mg-neg-bg: #7a1010;
+  --mg-neg-text: #ffffff;
   --mk-hard: #d0261a;
   --mk-soft: #9a6400;
   --k-spare-stripe: #a9dcd5;
@@ -76,10 +78,14 @@
     --k-ake-bg: #34383e;
     --k-spare-bg: #173b38;
   --mk-six: #ff5c5c;
+  --mg-neg-bg: #ff8a8a;
+  --mg-neg-text: #2b0606;
   --mk-hard: #ffa198;
   --mk-soft: #e8c15a;
   --k-spare-stripe: #24524d;
     --mk-six: #ff5c5c;
+    --mg-neg-bg: #ff8a8a;
+    --mg-neg-text: #2b0606;
     --mk-hard: #ffa198;
     --mk-soft: #e8c15a;
     --k-spare-stripe: #24524d;
@@ -122,6 +128,8 @@
   --sat: #8ab8ff;
   --backdrop: rgba(0, 0, 0, 0.6);
   color-scheme: dark;
+  --mg-neg-bg: #ff8a8a;
+  --mg-neg-text: #2b0606;
 }
 
 * { box-sizing: border-box; }
@@ -643,6 +651,26 @@ button.band-item { cursor: pointer; }
 .req-shift { box-shadow: inset 0 0 0 2px var(--text-muted); }
 
 /* スマホの幅 */
+/* 手順4 あと何人休めるか（5-1） */
+.grid-foot th, .grid-foot td { border-top: 2px solid var(--border); }
+.foot-cell { text-align: center; font-weight: 700; font-size: 0.85rem; padding: 2px 0; }
+.foot-cell.mg-ok { color: var(--text-muted); }
+.foot-cell.mg-one { background: var(--warn-bg); color: var(--warn-text); }
+.foot-cell.mg-zero { background: var(--error-bg); color: var(--error-text); }
+.foot-cell.mg-neg { background: var(--mg-neg-bg); color: var(--mg-neg-text); }
+.foot-cell.is-tight { box-shadow: inset 0 3px 0 var(--mk-hard), inset 0 -3px 0 var(--mk-hard); }
+.foot-cell.is-tight.tight-start { box-shadow: inset 3px 3px 0 var(--mk-hard), inset 0 -3px 0 var(--mk-hard); }
+.foot-cell.is-tight.tight-end { box-shadow: inset -3px 3px 0 var(--mk-hard), inset 0 -3px 0 var(--mk-hard); }
+.foot-cell.is-tight.tight-start.tight-end { box-shadow: inset 3px 3px 0 var(--mk-hard), inset -3px -3px 0 var(--mk-hard); }
+.margin-summary { margin-top: 8px; }
+.margin-table { border-collapse: collapse; font-size: 0.85rem; }
+.margin-table th, .margin-table td { border: 1px solid var(--border); padding: 2px 4px; min-width: 2.2em; }
+.margin-table thead th { background: var(--surface-2); text-align: center; }
+.margin-table th[scope="row"] { text-align: left; white-space: nowrap; background: var(--surface); }
+details.outlook h3 { margin-top: 12px; }
+.zero-days { margin: 8px 0 0; padding-left: 1.2em; }
+.margin-summary ul { margin: 4px 0 0; padding-left: 1.2em; }
+
 /* 手順6 元に戻す・入れ替え */
 .table-tools { margin-bottom: 8px; }
 .table-tools .row-actions { margin-top: 0; }

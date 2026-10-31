@@ -1,15 +1,16 @@
 // スタッフ×日の表（手順4 希望の入力・手順6 シフト表）。
 // 行がスタッフ、列が日。名前の列は止まり、表の中だけ横に動く。
 // マスはボタン。Tab で表に入り、矢印キーで動き、Enter・スペースで押す（Tab で止まるのは1マスだけ）。
-import { h } from '../dom.js?v=4.3';
-import { monthDays } from '../model.js?v=4.3';
-import { weekdayOf, WEEKDAY_LABELS } from '../calendar.js?v=4.3';
+import { h } from '../dom.js?v=5.1';
+import { monthDays } from '../model.js?v=5.1';
+import { weekdayOf, WEEKDAY_LABELS } from '../calendar.js?v=5.1';
 
 // cell(p, day) → { text, cls: [], label, extra: Node | null, title }
 // onPick(p, day, button) は、マスを押したとき
 // rowMark(p)・dayMark(day) → { cls: [], title } は、名前の列・日の見出しの印（無ければ印なし）
 // onSwap(pA, pB, day) があれば、マスを同じ日のほかの人のマスへドラッグして入れ替えられる（手順6）
-export function staffGrid({ data, testid, cellTestid, cell, onPick, rowMark = null, dayMark = null, onSwap = null }) {
+// footer があれば、表のいちばん下に1行足す：{ label, testid, cell(day) → { text, cls: [], title } }（手順4 の「あと何人休めるか」）
+export function staffGrid({ data, testid, cellTestid, cell, onPick, rowMark = null, dayMark = null, onSwap = null, footer = null }) {
   const nDays = monthDays(data);
   const { year, month } = data.month;
   const buttons = new Map(); // `${pid}|${day}` → button
@@ -167,9 +168,33 @@ export function staffGrid({ data, testid, cellTestid, cell, onPick, rowMark = nu
       }),
     ),
   );
+  const footCells = [];
+  const foot = footer
+    ? h(
+        'tr',
+        { class: 'grid-foot', testid: footer.testid },
+        h('th', { scope: 'row', class: 'sticky-col staff-head', text: footer.label }),
+        Array.from({ length: nDays }, (_, i) => {
+          const td = h('td', { class: 'foot-cell', dataset: { day: String(i + 1) } });
+          footCells.push(td);
+          return td;
+        }),
+      )
+    : null;
+  const paintFoot = () => {
+    if (!footer) return;
+    footCells.forEach((td, i) => {
+      const c = footer.cell(i + 1);
+      td.className = ['foot-cell', ...(c.cls || [])].join(' ');
+      td.textContent = c.text;
+      if (c.title) td.title = c.title;
+      else td.removeAttribute('title');
+    });
+  };
   const paintAll = () => {
     data.staff.forEach((p) => { for (let day = 1; day <= nDays; day += 1) paint(p, day); });
     paintHeads();
+    paintFoot();
   };
   paintAll();
   const first = buttons.get(`${data.staff[0]?.id}|1`);
@@ -177,11 +202,12 @@ export function staffGrid({ data, testid, cellTestid, cell, onPick, rowMark = nu
     first.tabIndex = 0;
     current = first;
   }
-  const table = h('table', { class: 'staff-grid', on: { keydown: onKey, click: onClick, ...dragEvents } }, h('thead', {}, head), h('tbody', {}, body));
+  const table = h('table', { class: 'staff-grid', on: { keydown: onKey, click: onClick, ...dragEvents } }, h('thead', {}, head), h('tbody', {}, body), foot ? h('tfoot', {}, foot) : null);
   return {
     el: h('div', { class: 'table-wrap', testid }, table),
     refresh: (p, day) => { if (buttons.has(`${p.id}|${day}`)) paint(p, day); },
     refreshAll: paintAll,
+    refreshFooter: paintFoot,
     focusCell: (pid, day) => {
       const r = data.staff.findIndex((p) => p.id === pid);
       if (r >= 0) focusAt(r, Math.min(Math.max(day, 1), nDays));

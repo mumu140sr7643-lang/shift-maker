@@ -1,22 +1,22 @@
 // 手順6 シフト表。マスを押すと、入れるものを選ぶ小窓が出る。変えるたびに決まりを検査し直し、印・件数の帯・一覧を直す。
 // 変えた所は履歴（history.js）に積み、「元に戻す」「やり直す」で戻せる。同じ日の2人のマスは、ドラッグか小窓で入れ替えられる。
 // 「エラーを自動で直す」の案を見ているあいだは、表を案の表に切りかえて見せる（repairview.js）。
-import { h, append } from '../dom.js?v=4.3';
-import { app } from '../state.js?v=4.3';
+import { h, append } from '../dom.js?v=5.1';
+import { app } from '../state.js?v=5.1';
 import {
   REST_KINDS, shiftById, cellOf, marksOf, requestOf, setCellByHand, setLock, swapCells, cellSymbol, cellName,
-} from '../model.js?v=4.3';
-import { record, undo, redo, nextUndo, nextRedo } from '../history.js?v=4.3';
-import { weekdayOf, WEEKDAY_LABELS } from '../calendar.js?v=4.3';
-import { notify } from '../dialog.js?v=4.3';
-import { checkTable } from '../check.js?v=4.3';
-import { screenTitle } from './common.js?v=4.3';
-import { staffGrid } from './staffgrid.js?v=4.3';
-import { needGrid } from './needgrid.js?v=4.3';
-import { markIndex, markClasses, markBadges, countBand, errorList, worsened } from './checkview.js?v=4.3';
-import { currentPreview, previewCard, openRepair, openRestart, repairBlockReason } from './repairview.js?v=4.3';
-import { summarize, summaryColumns } from '../summary.js?v=4.3';
-import { exportCsv, exportExcel } from '../files.js?v=4.3';
+} from '../model.js?v=5.1';
+import { record, undo, redo, nextUndo, nextRedo } from '../history.js?v=5.1';
+import { weekdayOf, WEEKDAY_LABELS } from '../calendar.js?v=5.1';
+import { notify } from '../dialog.js?v=5.1';
+import { checkTable } from '../check.js?v=5.1';
+import { screenTitle } from './common.js?v=5.1';
+import { staffGrid } from './staffgrid.js?v=5.1';
+import { needGrid } from './needgrid.js?v=5.1';
+import { markIndex, markClasses, markBadges, countBand, errorList, worsened } from './checkview.js?v=5.1';
+import { currentPreview, previewCard, openRepair, openRestart, repairBlockReason } from './repairview.js?v=5.1';
+import { summarize, summaryColumns } from '../summary.js?v=5.1';
+import { exportCsv, exportExcel } from '../files.js?v=5.1';
 
 const SVG = 'http://www.w3.org/2000/svg';
 const NL = String.fromCharCode(10); // マウスを置いたときの文の改行

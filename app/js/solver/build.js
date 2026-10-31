@@ -1,8 +1,8 @@
 // 自動で作るときの式を作る（docs/自動で作る案.md の 2〜4 章）。画面には触らない。ブラウザでも node でも使う。
 // 式は HiGHS が読める「LP の文」の形で作る。どの答えを採るかは、できた表を check.js で数えて決める。
-import { shiftById, monthDays, needOn, rankOrder, cellOf } from '../model.js?v=4.3';
-import { strengthOf } from '../rules.js?v=4.3';
-import { weekdayOf } from '../calendar.js?v=4.3';
+import { shiftById, monthDays, needOn, rankOrder, cellOf } from '../model.js?v=5.1';
+import { strengthOf } from '../rules.js?v=5.1';
+import { weekdayOf } from '../calendar.js?v=5.1';
 
 // 段の順番。rules が '*hard' / '*soft' の段は、ほかの段に入らない決まりをまとめる
 export const STAGES = [

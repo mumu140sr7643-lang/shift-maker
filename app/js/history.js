@@ -3,8 +3,8 @@
 //   保存すると、データと同じ保存場所を大きく使い、別のタブで変えたデータとも合わなくなるため。
 //   自動で作る前の表は、控え（「保存と控え」）からも戻せる。
 // データをまるごと置きかえたとき（見本・取り込み・控えから戻す・別のタブで変えた）と、月を切り替えたときは消す。
-import { app, commit, rerender, onReplaceData } from './state.js?v=4.3';
-import { snapshotOf, diffSnapshots, applyChanges } from './undo.js?v=4.3';
+import { app, commit, rerender, onReplaceData } from './state.js?v=5.1';
+import { snapshotOf, diffSnapshots, applyChanges } from './undo.js?v=5.1';
 
 export const MAX_HISTORY = 100;
 let undoStack = [];
@@ -14,9 +14,9 @@ const ymOf = (d) => `${d.month.year}-${d.month.month}`;
 
 // mutate(data) でデータを変えて保存し、変わった所を「label」として履歴に積む。
 // render: true なら、積んでから画面を作り直す（「元に戻す」のボタンが新しい履歴を見るように）
-export function record(label, mutate, { render = false } = {}) {
+export function record(label, mutate, { render = false, why = null } = {}) {
   const before = snapshotOf(app.data);
-  commit(mutate);
+  commit(mutate, { why: why ?? label });
   const changes = diffSnapshots(before, snapshotOf(app.data));
   if (changes.length) {
     undoStack.push({ label, ym: ymOf(app.data), changes });
