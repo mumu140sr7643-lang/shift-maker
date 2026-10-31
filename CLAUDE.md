@@ -66,7 +66,7 @@
 | `app/js/screens/outlookview.js` | 手順5 の「詳しい機能：作る前の見込み」（5-1 は日ごとの余裕） |
 | `docs/じっくり作る案.md` | じっくり作る（v6）の作り方の案（第2版。確かめ役と決めた）。何通りか同時（候補 あ・い・う・い2・え）・1分の答えを保険に・仕上げの入れ替え・中止と Worker の数・測り方と決め方 A〜I |
 | `app/js/solver/finish.js` | 仕上げの入れ替え（6-1）：`finishTable`（同じ日の出勤どうし・2人×2日のたすき掛け。check.js で数えて、isImproved で改善かつ並べる順で良いときだけ入れる）・`moveAllowed`・`applyMove`。乱数は使わない。画面には触らない。node からも使う |
-| `docs/OR-Tools の試し.md` | 計算の部品を OR-Tools（CP-SAT）にできるかの試しの案（枝 `try-ortools`。第1版）。式の移し方・整数にするやり方・測りと決め方 |
+| `docs/OR-Tools の試し.md` | 計算の部品を OR-Tools（CP-SAT。Python の ortools）にできるかの試しの案（枝 `try-ortools`。第2.1版）。式の移し方・整数にするやり方・測りと決め方 |
 | `vendor/highs/` | HiGHS（MIT。npm の `highs` 版 1.15.4 を手を加えずに置いている。`README.md`・`LICENSE`） |
 
 ## 確かめのコマンド（送る前に毎回、全部通す）
