@@ -1,9 +1,12 @@
 // じっくり作るの node の Worker（worker_threads）。ブラウザの solver/worker.js の 'careful' と同じ中身（careful.js の runCandidate）を動かす。
 // 測りのため、この Worker の HiGHS の WebAssembly のメモリのいちばん大きいとき（1回の HiGHS ごと。careful-memory.mjs と同じ読み方）と、
-// HiGHS が止まった回（onAbort）を数えて、'end' に memory として付ける（中身の計算は変えない）
+// HiGHS が止まった回（onAbort）を数えて、'end' に memory として付ける（中身の計算は変えない）。
+// 番号 −1 の回 errors と「できれば」の段を区切って解いた回数 softRounds も、ここで段の記録から数える
+// （careful.js のまとめの候補ごとの段は、番号と区切った回の記録を落とすため。67e4dd0 の C・E では数えていなかった）
 import { parentPort } from 'node:worker_threads';
 import highsLoader from '../vendor/highs/highs.mjs';
 import { runCandidate } from '../app/js/solver/careful.js';
+import { errorCount } from './lib.mjs';
 
 let lastMemory = null;
 let wasmMax = 0;
@@ -24,7 +27,8 @@ parentPort.on('message', async (m) => {
   const post = (x) => {
     if (x.type === 'end') {
       note();
-      parentPort.postMessage({ ...x, memory: { wasmMaxMB: Math.round((wasmMax / 1024 / 1024) * 10) / 10, aborts } });
+      const soft = (x.stages ?? []).find((st) => st.roundCodes);
+      parentPort.postMessage({ ...x, memory: { wasmMaxMB: Math.round((wasmMax / 1024 / 1024) * 10) / 10, aborts, errors: errorCount(x.stages), softRounds: soft ? soft.roundCodes.length : null } });
     } else parentPort.postMessage(x);
   };
   try {

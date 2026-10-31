@@ -117,7 +117,7 @@ if (only.includes('summary')) {
   const avg = (xs) => (xs.length ? Math.round((xs.reduce((a, b) => a + b, 0) / xs.length) * 10) / 10 : null);
 
   const runSet = (conf, its) => {
-    const out = { runs: 0, missing: 0, failed: 0, worseThanQuick: [], improved: 0, lbReached: 0, lbReachedAny: 0, lbReachedAll: 0, lbGaps: [], months: [], avg: {}, wins: {}, pickedBy: {}, tightened: [], amountMismatch: [], approxDiff: [], how: {}, broken: [], wasmMaxMB: {}, softRounds: {}, memoryOver: [], perWorkerMB: [] };
+    const out = { runs: 0, missing: 0, failed: 0, worseThanQuick: [], improved: 0, lbReached: 0, lbReachedAny: 0, lbReachedAll: 0, lbGaps: [], months: [], avg: {}, wins: {}, pickedBy: {}, tightened: [], amountMismatch: [], approxDiff: [], how: {}, broken: [], errorsUncounted: 0, wasmMaxMB: {}, softRounds: {}, memoryOver: [], perWorkerMB: [] };
     const sums = { quick: { six: [], hard: [], soft: [] }, picked: { six: [], hard: [], soft: [] } };
     for (const it of its) {
       const lb = lowerBound(it.data);
@@ -131,13 +131,16 @@ if (only.includes('summary')) {
         }
         out.runs += 1;
         // HiGHS が止まった回（番号 −1・onAbort）と、1回の HiGHS の WebAssembly のメモリのいちばん大きいとき（候補ごと）。止まった回は1回でもあれば不具合
+        // 番号 −1 と区切った回数は careful-worker.mjs が数えた workerMemory から読む（候補ごとの段の記録には番号が無い。
+        // 67e4dd0 の C・E のように workerMemory に errors が無い回は「数えていない回」に数える）
         for (const cand of x.c.candidates ?? []) {
           const mem = x.c.workerMemory?.[cand.role];
-          const errors = errorCount(cand.stages);
+          if (mem && mem.errors === undefined) out.errorsUncounted += 1;
+          const errors = mem?.errors ?? errorCount(cand.stages);
           if (errors || mem?.aborts) out.broken.push(`${it.id} 回${r} ${cand.role}：番号 −1 ${errors}回・止まった ${mem?.aborts ?? '?'}回`);
           if (mem) out.wasmMaxMB[cand.role] = Math.max(out.wasmMaxMB[cand.role] ?? 0, mem.wasmMaxMB);
-          const soft = (cand.stages ?? []).find((st) => st.roundCodes);
-          if (soft) out.softRounds[soft.roundCodes.length] = (out.softRounds[soft.roundCodes.length] ?? 0) + 1;
+          const rounds = mem?.softRounds ?? (cand.stages ?? []).find((st) => st.roundCodes)?.roundCodes.length;
+          if (rounds) out.softRounds[rounds] = (out.softRounds[rounds] ?? 0) + 1;
         }
         // 1本あたりのメモリ（この node のいちばん多いメモリ − 何もしない node 50MB）÷ 本数 と、本数の式の見込み m（careful.js の workerMemoryMB）
         if (x.c.maxRssMB && x.c.workers) {
@@ -243,7 +246,7 @@ if (only.includes('summary')) {
     console.log(`  平均 1分の答え ${JSON.stringify(s.avg.quick)} → 選んだ答え ${JSON.stringify(s.avg.picked)}`);
     console.log(`  選んだ候補 ${JSON.stringify(s.pickedBy)}・ほかのどの候補より良かった回 ${JSON.stringify(s.wins)}・終わり方 ${JSON.stringify(s.how)}`);
     console.log(`  締め直し 解き直し ${s.tightened.length}・量が減った ${s.tightened.filter((x) => x.applied).length}（量が増えた ${s.tightened.filter((x) => !x.ok).length}）・式の量と検査の量が合わない ${s.amountMismatch.length}・近い形で数える決まりの違い ${s.approxDiff.length}`);
-    console.log(`  HiGHS が止まった・番号 −1 の回 ${s.broken.length}${s.broken.length ? `（${s.broken.slice(0, 5).join('、')}）` : ''}・1回の HiGHS の WebAssembly のメモリ いちばん大きいとき ${JSON.stringify(s.wasmMaxMB)}MB・「できれば」の段の回数 ${JSON.stringify(s.softRounds)}`);
+    console.log(`  HiGHS が止まった・番号 −1 の回 ${s.broken.length}${s.broken.length ? `（${s.broken.slice(0, 5).join('、')}）` : ''}${s.errorsUncounted ? `（番号 −1 を数えていない候補の回 ${s.errorsUncounted}。止まった回 onAbort は数えた）` : ''}・1回の HiGHS の WebAssembly のメモリ いちばん大きいとき ${JSON.stringify(s.wasmMaxMB)}MB・「できれば」の段の回数 ${JSON.stringify(s.softRounds)}`);
     console.log(`  1本あたりのメモリ いちばん多い ${s.perWorkerMB.length ? Math.max(...s.perWorkerMB) : '―'}MB・見込み m を超えた回 ${s.memoryOver.length}`);
   }
   console.log(`1分で作る（何も動かしていないとき）との比べ：組 ${summary.vsH.pairs}・良い ${summary.vsH.better}・同じ ${summary.vsH.same}・悪い ${summary.vsH.worse}`);

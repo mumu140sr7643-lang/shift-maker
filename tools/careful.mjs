@@ -2,7 +2,8 @@
 // 使い方: node tools/careful.mjs 保存したファイル.json [--seconds 600] [--workers 4] [--quick 60] [--seed 1] [--out フォルダ]
 //   --seed は1分の答えの種（画面では「作った記録の数 + 1」）。い・う・い2 はそれに 1・2・3 を足す
 // --out に出すもの：careful.json（候補ごとの結果・選んだ答え・答えの一覧の件数と時刻・この node のいちばん多いメモリ maxRssMB（Worker の分も入る）・
-//   Worker ごとの workerMemory（1回の HiGHS の WebAssembly のメモリのいちばん大きいとき wasmMaxMB・HiGHS が止まった回 aborts））・
+//   Worker ごとの workerMemory（1回の HiGHS の WebAssembly のメモリのいちばん大きいとき wasmMaxMB・HiGHS が止まった回 aborts・
+//   番号 −1 の回 errors・「できれば」の段を区切って解いた回数 softRounds（区切らない候補は null））・
 //   answers.json（全部の答えの表。careful-pick.mjs で選び直す）・
 //   result.json（選んだ表を入れたデータ。このアプリで取り込める）・count.json（tools/count.mjs と同じ形）
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
