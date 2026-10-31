@@ -15,6 +15,7 @@ import * as C from '../app/js/check.js';
 import * as R from '../app/js/rules.js';
 import { solveStaged } from '../app/js/solver/stages.js';
 import highsLoader from '../vendor/highs/highs.mjs';
+import { snapshotOf, diffSnapshots, applyChanges } from '../app/js/undo.js';
 
 const results = [];
 const check = (name, problems) => results.push({ name, problems });
@@ -583,6 +584,54 @@ const check = (name, problems) => results.push({ name, problems });
     for (const r of ['notAssigned', 'requestDiff', 'nightNext']) if (c.byRule[r].count) problems.push(`できた表に ${r} が ${c.byRule[r].count}件`);
   }
   check('自動で作る（小さな月で、同じ答え・固定を守る）', problems);
+}
+
+// 15. 元に戻す・やり直す（undo.js）と、同じ日の2人の入れ替え（swapCells）（4-1）
+{
+  const problems = [];
+  const d = S.buildSample('care', 2026, 11);
+  const [a, b, c] = d.staff;
+  const night = d.settings.shifts.find((x) => x.night);
+  const early = d.settings.shifts.find((x) => !x.night && b.shifts.includes(x.id) && a.shifts.includes(x.id));
+  // 1つの操作：マス・固定の印・日ごとの必要人数・作った記録を変える → 戻すと1文字も同じ、やり直すと変えたあとと1文字も同じ
+  const text0 = M.canonicalJSON(d);
+  const s0 = snapshotOf(d);
+  M.setCellByHand(d, a.id, 3, { kind: 'shift', shift: night.id });
+  M.setLock(d, c.id, 7, true);
+  M.setNeedOverride(d, early.id, 'all', 9, 5);
+  d.month.runs.push({ at: 'x' });
+  const ch = diffSnapshots(s0, snapshotOf(d));
+  const text1 = M.canonicalJSON(d);
+  if (ch.length !== 5) problems.push(`変えた所の数が ${ch.length}（マス2・印1・必要人数1・記録1 の 5 のはず）`);
+  const u = applyChanges(d, ch, 'undo');
+  if (M.canonicalJSON(d) !== text0 || u.skipped) problems.push('元に戻すと、変える前と1文字も同じにならない');
+  applyChanges(d, ch, 'redo');
+  if (M.canonicalJSON(d) !== text1) problems.push('やり直すと、変えたあとと1文字も同じにならない');
+  // そのあとで変えた所は、いまのまま（ほかは戻す）
+  M.setCellByHand(d, a.id, 3, { kind: 'off' });
+  const u2 = applyChanges(d, ch, 'undo');
+  if (u2.skipped !== 2 || M.cellOf(d, a.id, 3)?.kind !== 'off' || M.marksOf(d, c.id, 7).locked) problems.push(`そのあとで変えた所を戻した、またはほかを戻さなかった（いまのままにした所 ${u2.skipped}）`);
+  // いなくなった人のマスは戻さない
+  const d2 = S.buildSample('care', 2026, 11);
+  const t0 = snapshotOf(d2);
+  M.setCellByHand(d2, d2.staff[1].id, 2, { kind: 'off' });
+  const ch2 = diffSnapshots(t0, snapshotOf(d2));
+  d2.staff.splice(1, 1);
+  delete d2.month.table[b.id];
+  const u3 = applyChanges(d2, ch2, 'undo');
+  if (u3.applied.length || d2.month.table[b.id]) problems.push('いなくなった人のマスを戻した');
+  // 入れ替え：夜勤と早出を入れ替えると、明けも動く。固定したマスは入れ替えない
+  const d3 = S.buildSample('care', 2026, 11);
+  const [p, q] = [d3.staff[1], d3.staff[3]];
+  M.setCellByHand(d3, p.id, 10, { kind: 'shift', shift: night.id });
+  M.setCellByHand(d3, q.id, 10, { kind: 'shift', shift: early.id });
+  const r = M.swapCells(d3, p.id, q.id, 10);
+  if (!r.ok || M.cellOf(d3, p.id, 10)?.shift !== early.id || M.cellOf(d3, q.id, 10)?.shift !== night.id) problems.push('同じ日の2人のマスが入れ替わらない');
+  if (M.cellOf(d3, p.id, 11) !== null || M.cellOf(d3, q.id, 11)?.kind !== 'ake') problems.push('入れ替えたあと、明けが夜勤の人の次の日に動かない');
+  M.setLock(d3, p.id, 12, true);
+  const before3 = M.canonicalJSON(d3);
+  if (M.swapCells(d3, p.id, q.id, 12).ok || M.canonicalJSON(d3) !== before3) problems.push('固定したマスを入れ替えた');
+  check('元に戻す・やり直す（変えた所だけ・いまもその値の所だけ）と入れ替え', problems);
 }
 
 // 10. 言葉の確かめ：一覧の言葉が、リポジトリのファイル・コミットの文に入っていないか

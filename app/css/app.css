@@ -643,6 +643,16 @@ button.band-item { cursor: pointer; }
 .req-shift { box-shadow: inset 0 0 0 2px var(--text-muted); }
 
 /* スマホの幅 */
+/* 手順6 元に戻す・入れ替え */
+.table-tools { margin-bottom: 8px; }
+.table-tools .row-actions { margin-top: 0; }
+.table-tools .help { margin: 4px 0 0; }
+.grid-cell.is-dragging { opacity: 0.5; }
+.grid-cell.is-drop { outline: 3px dashed var(--primary); outline-offset: -3px; }
+.pick-swap { margin-top: 12px; }
+.pick-swap > summary { cursor: pointer; font-weight: 600; }
+.pick-swap .pick-grid { margin-top: 8px; }
+
 /* 手順5 自動で作る */
 .modes { display: grid; gap: 8px; }
 .mode { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); cursor: pointer; }

@@ -3,10 +3,11 @@
 // キーボードで続けて入れられる：押すと数字が選ばれ、打つと置き換わる。
 // Enter で次の日、Shift+Enter で前の日、↑↓ で上下の行、Esc でやめる。
 // Shift を押しながら日を押す（なぞる）と何日か選べ、数字を打って Enter で全部に入る。
-import { h } from '../dom.js?v=3.3';
-import { app, commit } from '../state.js?v=3.3';
-import { needRows, needOn, setNeedOverride, shiftById, monthDays } from '../model.js?v=3.3';
-import { weekdayOf, WEEKDAY_LABELS } from '../calendar.js?v=3.3';
+import { h } from '../dom.js?v=4.1';
+import { app } from '../state.js?v=4.1';
+import { record } from '../history.js?v=4.1';
+import { needRows, needOn, setNeedOverride, shiftById, monthDays } from '../model.js?v=4.1';
+import { weekdayOf, WEEKDAY_LABELS } from '../calendar.js?v=4.1';
 
 function rowLabel(d, row) {
   const s = shiftById(d, row.shiftId);
@@ -86,7 +87,9 @@ export function needGrid({ assigned = null, onChange = null } = {}) {
     const days = sel && sel.row === r && day >= sel.from && day <= sel.to
       ? Array.from({ length: sel.to - sel.from + 1 }, (_, i) => sel.from + i)
       : [day];
-    commit((data) => days.forEach((x) => setNeedOverride(data, row.shiftId, row.emp, x, n)));
+    const { symbol: sym0, emp: emp0 } = rowLabel(app.data, row);
+    const span = days.length > 1 ? `${days[0]}日〜${days[days.length - 1]}日` : `${days[0]}日`;
+    record(`日ごとの必要人数（${sym0}・${emp0}・${span}）`, (data) => days.forEach((x) => setNeedOverride(data, row.shiftId, row.emp, x, n)));
     days.forEach((x) => paint(r, x));
     onChange?.();
     const { symbol, emp } = rowLabel(app.data, row);

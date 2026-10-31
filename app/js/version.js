@@ -1,2 +1,2 @@
 // アプリの版。tools/bump-version.mjs で、読み込むファイルの ?v= と一緒に上げる。
-export const APP_VERSION = '3.3';
+export const APP_VERSION = '4.1';

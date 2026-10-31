@@ -810,5 +810,49 @@
  {
   "id": "run-failed",
   "find": "run-failed"
+ },
+ {
+  "id": "table-tools",
+  "find": "table-tools"
+ },
+ {
+  "id": "undo",
+  "find": "undo"
+ },
+ {
+  "id": "redo",
+  "find": "redo"
+ },
+ {
+  "id": "undo-status",
+  "find": "undo-status"
+ },
+ {
+  "id": "redo-status",
+  "find": "redo-status"
+ },
+ {
+  "id": "undo-notice",
+  "find": "undo-notice"
+ },
+ {
+  "id": "pick-swap",
+  "find": "pick-swap"
+ },
+ {
+  "id": "swap-option",
+  "find": "swap-option"
+ },
+ {
+  "id": "swap-locked-notice",
+  "find": "swap-locked-notice"
+ },
+ {
+  "id": "run-undo",
+  "find": "run-undo"
+ },
+ {
+  "id": "run-undone",
+  "find": "run-undone"
  }
 ]

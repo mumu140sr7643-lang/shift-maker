@@ -1,16 +1,18 @@
 // 手順6 シフト表。マスを押すと、入れるものを選ぶ小窓が出る。変えるたびに決まりを検査し直し、印・件数の帯・一覧を直す。
-import { h, append } from '../dom.js?v=3.3';
-import { app, commit } from '../state.js?v=3.3';
+// 変えた所は履歴（history.js）に積み、「元に戻す」「やり直す」で戻せる。同じ日の2人のマスは、ドラッグか小窓で入れ替えられる。
+import { h, append } from '../dom.js?v=4.1';
+import { app } from '../state.js?v=4.1';
 import {
-  REST_KINDS, shiftById, cellOf, marksOf, requestOf, setCellByHand, setLock, cellSymbol, cellName,
-} from '../model.js?v=3.3';
-import { weekdayOf, WEEKDAY_LABELS } from '../calendar.js?v=3.3';
-import { notify } from '../dialog.js?v=3.3';
-import { checkTable } from '../check.js?v=3.3';
-import { screenTitle } from './common.js?v=3.3';
-import { staffGrid } from './staffgrid.js?v=3.3';
-import { needGrid } from './needgrid.js?v=3.3';
-import { markIndex, markClasses, markBadges, countBand, errorList, worsened } from './checkview.js?v=3.3';
+  REST_KINDS, shiftById, cellOf, marksOf, requestOf, setCellByHand, setLock, swapCells, cellSymbol, cellName,
+} from '../model.js?v=4.1';
+import { record, undo, redo, nextUndo, nextRedo } from '../history.js?v=4.1';
+import { weekdayOf, WEEKDAY_LABELS } from '../calendar.js?v=4.1';
+import { notify } from '../dialog.js?v=4.1';
+import { checkTable } from '../check.js?v=4.1';
+import { screenTitle } from './common.js?v=4.1';
+import { staffGrid } from './staffgrid.js?v=4.1';
+import { needGrid } from './needgrid.js?v=4.1';
+import { markIndex, markClasses, markBadges, countBand, errorList, worsened } from './checkview.js?v=4.1';
 
 const SVG = 'http://www.w3.org/2000/svg';
 const NL = String.fromCharCode(10); // マウスを置いたときの文の改行
@@ -60,6 +62,36 @@ function headMark(mk) {
   return mk ? { cls: markClasses(mk), title: mk.texts.join(NL) } : null;
 }
 
+const who = (p) => `${p.name || '名前なし'}さん`;
+
+// 夜勤の次の日の明けをどうしたかの知らせ（next は setCellByHand の返り値）
+function akeNotice(d, p, day, next) {
+  const nextDay = `${who(p)}の${d.month.month}月${day + 1}日`;
+  if (next?.what === 'ake-blocked') {
+    notify(
+      `${nextDay}には、もう「${cellName(d, next.cell)}」が入っているので、明けにしていません。夜勤の次の日は休み（明け）にする決まりです。`,
+      { kind: 'warn', testid: 'ake-blocked-notice' },
+    );
+  } else if (next?.what === 'ake-locked') {
+    notify(`${nextDay}は固定しているので、明けにしていません。夜勤の次の日は休み（明け）にする決まりです。`, { kind: 'warn', testid: 'ake-locked-notice' });
+  } else if (next?.what === 'ake-kept-locked') {
+    notify(`${nextDay}の明けは固定しているので、そのままにしました。`, { kind: 'info', testid: 'ake-kept-notice' });
+  }
+}
+
+// 同じ日の2人のマスを入れ替える。固定したマスは入れ替えない
+function swapByHand(pa, pb, day, changed) {
+  const d = app.data;
+  if (marksOf(d, pa.id, day).locked || marksOf(d, pb.id, day).locked) {
+    notify('固定したマスは入れ替えません。入れ替えるときは、先にマスを押して「このマスを固定する」を外してください。', { kind: 'warn', testid: 'swap-locked-notice' });
+    return;
+  }
+  let res = null;
+  record(`${who(pa)}と${who(pb)}の${d.month.month}月${day}日の入れ替え`, (x) => { res = swapCells(x, pa.id, pb.id, day); });
+  changed(true);
+  for (const n of res?.notes ?? []) akeNotice(app.data, app.data.staff.find((q) => q.id === n.pid), day, n.next);
+}
+
 function openPicker(p, day, changed, returnFocus) {
   const d = app.data;
   const { year, month } = d.month;
@@ -73,20 +105,10 @@ function openPicker(p, day, changed, returnFocus) {
   };
   const choose = (value) => {
     let next = null;
-    commit((x) => { next = setCellByHand(x, p.id, day, value); });
+    record(`${who(p)}の${month}月${day}日`, (x) => { next = setCellByHand(x, p.id, day, value); });
     close();
     changed(true);
-    const nextDay = `${month}月${day + 1}日`;
-    if (next?.what === 'ake-blocked') {
-      notify(
-        `${nextDay}には、もう「${cellName(d, next.cell)}」が入っているので、明けにしていません。夜勤の次の日は休み（明け）にする決まりです。`,
-        { kind: 'warn', testid: 'ake-blocked-notice' },
-      );
-    } else if (next?.what === 'ake-locked') {
-      notify(`${nextDay}は固定しているので、明けにしていません。夜勤の次の日は休み（明け）にする決まりです。`, { kind: 'warn', testid: 'ake-locked-notice' });
-    } else if (next?.what === 'ake-kept-locked') {
-      notify(`${nextDay}の明けは固定しているので、そのままにしました。`, { kind: 'info', testid: 'ake-kept-notice' });
-    }
+    akeNotice(d, p, day, next);
   };
   const same = (a, b) => (a === null && b === null) || (a && b && a.kind === b.kind && (a.kind !== 'shift' || a.shift === b.shift));
   const option = (value, symbol, label, cls, note = null) =>
@@ -104,14 +126,49 @@ function openPicker(p, day, changed, returnFocus) {
       h('span', { class: 'pick-label', text: label }),
       note ? h('span', { class: 'pick-note', text: note }) : null,
     );
-  const lock = h('input', { type: 'checkbox', checked: Boolean(marksOf(d, p.id, day).locked), testid: 'pick-lock' });
+  const locked = Boolean(marksOf(d, p.id, day).locked);
+  const lock = h('input', { type: 'checkbox', checked: locked, testid: 'pick-lock' });
   lock.addEventListener('change', () => {
-    commit((x) => setLock(x, p.id, day, lock.checked));
+    record(`${who(p)}の${month}月${day}日の固定`, (x) => setLock(x, p.id, day, lock.checked));
     changed(false);
   });
+  const others = d.staff.filter((q) => q.id !== p.id);
+  const swapBox = others.length
+    ? h(
+        'details',
+        { class: 'pick-swap', testid: 'pick-swap' },
+        h('summary', { text: 'この日の、ほかの人と入れ替える' }),
+        locked ? h('p', { class: 'help', text: 'このマスは固定しているので、入れ替えられません。下の「このマスを固定する」を外すと入れ替えられます。' }) : null,
+        h(
+          'div',
+          { class: 'pick-grid' },
+          others.map((q) => {
+            const qLocked = Boolean(marksOf(d, q.id, day).locked);
+            return h(
+              'button',
+              {
+                type: 'button',
+                class: 'pick swap-option',
+                testid: 'swap-option',
+                dataset: { staffId: q.id },
+                disabled: locked || qLocked,
+                on: {
+                  click: () => {
+                    close();
+                    swapByHand(p, q, day, changed);
+                  },
+                },
+              },
+              h('span', { class: 'pick-label', text: `${who(q)}（${cellName(d, cellOf(d, q.id, day))}）` }),
+              qLocked ? h('span', { class: 'pick-note', text: '固定' }) : null,
+            );
+          }),
+        ),
+      )
+    : null;
   append(
     dlg,
-    h('h2', { id: 'picker-title', text: `${p.name || '名前なし'}さん　${month}月${day}日（${WEEKDAY_LABELS[weekdayOf(year, month, day)]}）` }),
+    h('h2', { id: 'picker-title', text: `${who(p)}　${month}月${day}日（${WEEKDAY_LABELS[weekdayOf(year, month, day)]}）` }),
     h('p', { text: `いま：${cellName(d, now)}` }),
     req ? h('p', { class: 'help', testid: 'pick-request', text: `この日の希望：${cellName(d, req)}` }) : null,
     d.settings.shifts.length
@@ -133,6 +190,7 @@ function openPicker(p, day, changed, returnFocus) {
       REST_KINDS.map((r) => option({ kind: r.id }, r.symbol, r.label, [`k-${r.id}`])),
       option(null, '', '空ける', ['pick-empty']),
     ),
+    swapBox,
     h('label', { class: 'check pick-lock' }, lock, h('span', { text: 'このマスを固定する（自動で作るときに、このマスを変えない）' })),
     h('div', { class: 'dialog-buttons' }, h('button', { type: 'button', class: 'btn', testid: 'picker-close', text: '閉じる', on: { click: close } })),
   );
@@ -191,11 +249,19 @@ function breakdown(d, result, key) {
     h('p', { class: 'help', text: '余り日は、人が多すぎて出勤させずに置く日です。公休には数えません。' }));
 }
 
+// 元に戻す・やり直すの結果の知らせ
+function tellUndo(res, what) {
+  if (!res) return;
+  if (res.otherMonth) notify('月を切り替えたので、前の月の変更は戻せません。', { kind: 'warn', testid: 'undo-notice' });
+  else if (res.skipped) notify(`${what}ました（${res.label}）。そのあとで変えた所 ${res.skipped}か所は、いまのままにしました。`, { kind: 'info', testid: 'undo-notice' });
+  else notify(`${what}ました（${res.label}）。`, { kind: 'ok', testid: 'undo-notice' });
+}
+
 export function renderStep6(el) {
   const d = app.data;
   append(
     el,
-    ...screenTitle('手順6 シフト表', 'マスを押すと、入れるシフトや休みを選べます。変えるたびに、決まりに合っているかを検査し直します。自動で作るのは、このあとの版で使えるようになります。'),
+    ...screenTitle('手順6 シフト表', 'マスを押すと、入れるシフトや休みを選べます。変えるたびに、決まりに合っているかを検査し直します。自動で作るのは 手順5 です。'),
   );
   if (!d.staff.length) {
     append(el, h('p', { class: 'empty', testid: 'table-empty', text: 'スタッフがいません。手順3 スタッフで、1人以上入れてください。' }));
@@ -203,11 +269,30 @@ export function renderStep6(el) {
   }
   let result = checkTable(d);
   let marks = markIndex(d, result);
+  const tools = h('div', { class: 'table-tools', testid: 'table-tools' });
   const bandBox = h('div', { class: 'band-box' });
   const detailBox = h('div', { class: 'band-detail card', testid: 'band-detail', hidden: true });
   const listBox = h('div');
   let openKey = null;
   let need = null;
+
+  // 元に戻す・やり直す（押すと画面を作り直す）
+  const drawTools = () => {
+    tools.textContent = '';
+    const u = nextUndo();
+    const r = nextRedo();
+    append(
+      tools,
+      h(
+        'div',
+        { class: 'row-actions' },
+        h('button', { type: 'button', class: 'btn', testid: 'undo', text: '元に戻す', disabled: !u, on: { click: () => tellUndo(undo(), '元に戻し') } }),
+        h('button', { type: 'button', class: 'btn', testid: 'redo', text: 'やり直す', disabled: !r, on: { click: () => tellUndo(redo(), 'やり直し') } }),
+      ),
+      h('p', { class: 'help', testid: 'undo-status', text: u ? `「元に戻す」で、「${u.label}」の前に戻ります。` : '戻せる変更はまだありません（このページを開いてから変えたものを戻せます。読み直すと消えます）。' }),
+      r ? h('p', { class: 'help', testid: 'redo-status', text: `「やり直す」で、「${r.label}」をもう一度します。` }) : null,
+    );
+  };
 
   const focusItem = (it) => {
     if (it.staff) grid.focusCell(it.staff, it.day ?? it.from ?? 1);
@@ -246,6 +331,7 @@ export function renderStep6(el) {
     grid.refreshAll();
     need?.refresh();
     drawCheck();
+    drawTools();
     const w = announce ? worsened(before, result) : [];
     if (w.length) notify(`悪くなりました：${w.join('、')}`, { kind: 'warn', testid: 'worse-notice' });
   };
@@ -256,19 +342,22 @@ export function renderStep6(el) {
     cellTestid: 'table-cell',
     cell: (p, day) => tableCell(d, p, day, marks),
     onPick: (p, day, btn) => openPicker(p, day, recheck, btn),
+    onSwap: (pa, pb, day) => swapByHand(pa, pb, day, recheck),
     rowMark: (p) => headMark(marks.get(`n|${p.id}`)),
     dayMark: (day) => headMark(marks.get(`d|${day}`)),
   });
   drawCheck();
+  drawTools();
   if (d.settings.shifts.length) need = needGrid({ assigned: assignedCounter(d), onChange: () => recheck(true) });
   append(
     el,
     h(
       'section',
       { class: 'card' },
+      tools,
       bandBox,
       detailBox,
-      h('p', { class: 'help', text: '行がスタッフ、列が日です。表は横に動かせます。夜勤を入れると、次の日が空いていれば「明け」が入ります。' }),
+      h('p', { class: 'help', text: '行がスタッフ、列が日です。表は横に動かせます。夜勤を入れると、次の日が空いていれば「明け」が入ります。マスを同じ日のほかの人のマスへドラッグすると、2人のマスを入れ替えます（スマホやキーボードでは、マスを押して「この日の、ほかの人と入れ替える」）。' }),
       legend(d),
       grid.el,
     ),

@@ -1,14 +1,15 @@
 // スタッフ×日の表（手順4 希望の入力・手順6 シフト表）。
 // 行がスタッフ、列が日。名前の列は止まり、表の中だけ横に動く。
 // マスはボタン。Tab で表に入り、矢印キーで動き、Enter・スペースで押す（Tab で止まるのは1マスだけ）。
-import { h } from '../dom.js?v=3.3';
-import { monthDays } from '../model.js?v=3.3';
-import { weekdayOf, WEEKDAY_LABELS } from '../calendar.js?v=3.3';
+import { h } from '../dom.js?v=4.1';
+import { monthDays } from '../model.js?v=4.1';
+import { weekdayOf, WEEKDAY_LABELS } from '../calendar.js?v=4.1';
 
 // cell(p, day) → { text, cls: [], label, extra: Node | null, title }
 // onPick(p, day, button) は、マスを押したとき
 // rowMark(p)・dayMark(day) → { cls: [], title } は、名前の列・日の見出しの印（無ければ印なし）
-export function staffGrid({ data, testid, cellTestid, cell, onPick, rowMark = null, dayMark = null }) {
+// onSwap(pA, pB, day) があれば、マスを同じ日のほかの人のマスへドラッグして入れ替えられる（手順6）
+export function staffGrid({ data, testid, cellTestid, cell, onPick, rowMark = null, dayMark = null, onSwap = null }) {
   const nDays = monthDays(data);
   const { year, month } = data.month;
   const buttons = new Map(); // `${pid}|${day}` → button
@@ -77,6 +78,54 @@ export function staffGrid({ data, testid, cellTestid, cell, onPick, rowMark = nu
     onPick(p, Number(btn.dataset.day), btn);
   };
 
+  // ドラッグで入れ替え：同じ日のほかの人のマスにだけ落とせる
+  let dragFrom = null;
+  let dropOn = null;
+  const cellOfEvent = (e) => e.target.closest?.('button.grid-cell');
+  const clearDrop = () => {
+    dropOn?.classList.remove('is-drop');
+    dropOn = null;
+  };
+  const dragEvents = onSwap
+    ? {
+        dragstart: (e) => {
+          const btn = cellOfEvent(e);
+          if (!btn) return;
+          dragFrom = { row: Number(btn.dataset.row), day: Number(btn.dataset.day) };
+          e.dataTransfer.effectAllowed = 'move';
+          e.dataTransfer.setData('text/plain', `${dragFrom.row}|${dragFrom.day}`);
+          btn.classList.add('is-dragging');
+        },
+        dragover: (e) => {
+          const btn = cellOfEvent(e);
+          if (!btn || !dragFrom) return;
+          if (Number(btn.dataset.day) !== dragFrom.day || Number(btn.dataset.row) === dragFrom.row) return;
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+          if (dropOn !== btn) {
+            clearDrop();
+            dropOn = btn;
+            btn.classList.add('is-drop');
+          }
+        },
+        drop: (e) => {
+          const btn = cellOfEvent(e);
+          const from = dragFrom;
+          clearDrop();
+          if (!btn || !from) return;
+          e.preventDefault();
+          const to = Number(btn.dataset.row);
+          if (Number(btn.dataset.day) !== from.day || to === from.row) return;
+          onSwap(data.staff[from.row], data.staff[to], from.day);
+        },
+        dragend: () => {
+          table.querySelectorAll('.is-dragging').forEach((b) => b.classList.remove('is-dragging'));
+          clearDrop();
+          dragFrom = null;
+        },
+      }
+    : {};
+
   const head = h(
     'tr',
     {},
@@ -112,7 +161,7 @@ export function staffGrid({ data, testid, cellTestid, cell, onPick, rowMark = nu
       })(),
       Array.from({ length: nDays }, (_, i) => {
         const day = i + 1;
-        const btn = h('button', { type: 'button', tabindex: -1, testid: cellTestid, dataset: { row: String(r), day: String(day), staffId: p.id } });
+        const btn = h('button', { type: 'button', tabindex: -1, draggable: onSwap ? 'true' : null, testid: cellTestid, dataset: { row: String(r), day: String(day), staffId: p.id } });
         buttons.set(`${p.id}|${day}`, btn);
         return h('td', {}, btn);
       }),
@@ -128,7 +177,7 @@ export function staffGrid({ data, testid, cellTestid, cell, onPick, rowMark = nu
     first.tabIndex = 0;
     current = first;
   }
-  const table = h('table', { class: 'staff-grid', on: { keydown: onKey, click: onClick } }, h('thead', {}, head), h('tbody', {}, body));
+  const table = h('table', { class: 'staff-grid', on: { keydown: onKey, click: onClick, ...dragEvents } }, h('thead', {}, head), h('tbody', {}, body));
   return {
     el: h('div', { class: 'table-wrap', testid }, table),
     refresh: (p, day) => { if (buttons.has(`${p.id}|${day}`)) paint(p, day); },

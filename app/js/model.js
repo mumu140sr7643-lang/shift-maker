@@ -1,6 +1,6 @@
 // データの形と、データを作る・確かめる・直す関数。
 // 画面（DOM）には触らない。ブラウザでも node（確かめの道具）でも同じものを使う。
-import { daysInMonth, weekdayOf } from './calendar.js?v=3.3';
+import { daysInMonth, weekdayOf } from './calendar.js?v=4.1';
 
 // データの形の版。形を変えたら 1 つ上げ、migrate() に古い形を直す手順を足す。
 export const FORMAT_VERSION = 1;
@@ -341,6 +341,22 @@ export function setLock(data, pid, day, on) {
 
 export function isNightShift(data, value) {
   return value?.kind === 'shift' && Boolean(shiftById(data, value.shift)?.night);
+}
+
+// 同じ日の2人のマスを入れ替える（4-1。手順6 のドラッグ・マスの小窓）。固定したマスは入れ替えない。
+// 夜勤の次の日の明けは、手で変えたときと同じに出し入れする（setCellByHand）。
+// 返す：{ ok: false, reason: 'same' | 'locked' } | { ok: true, notes: [{ pid, next }] }（next は setCellByHand の返り値）
+export function swapCells(data, pidA, pidB, day) {
+  if (pidA === pidB) return { ok: false, reason: 'same' };
+  if (marksOf(data, pidA, day).locked || marksOf(data, pidB, day).locked) return { ok: false, reason: 'locked' };
+  const a = cellOf(data, pidA, day);
+  const b = cellOf(data, pidB, day);
+  const notes = [];
+  const na = setCellByHand(data, pidA, day, b);
+  const nb = setCellByHand(data, pidB, day, a);
+  if (na) notes.push({ pid: pidA, next: na });
+  if (nb) notes.push({ pid: pidB, next: nb });
+  return { ok: true, notes };
 }
 
 // 自動で作った表を入れる。固定したマスの印は残し、「手で変えた」の印は消す（新しい表なので）。

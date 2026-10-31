@@ -1,17 +1,20 @@
 // 手順5 自動で作る：1分で作る（おためし）。計算は裏方（solver/worker.js の Web Worker）で行うので、画面は固まらない。
 // 計算は写しで行い、終わってから、そのあいだにデータが変わっていないことを確かめて本物の表に入れる。
-import { h, append } from '../dom.js?v=3.3';
-import { app, commit, rerender, goStep } from '../state.js?v=3.3';
-import { canonicalJSON, clone, applyGenerated } from '../model.js?v=3.3';
-import { checkTable, solveConflicts, unavoidableErrors } from '../check.js?v=3.3';
-import { RULE_BY_ID } from '../rules.js?v=3.3';
-import { ask, notify } from '../dialog.js?v=3.3';
-import { takeBackup, backupLines } from '../backup.js?v=3.3';
-import { timeLabel } from '../calendar.js?v=3.3';
-import { screenTitle } from './common.js?v=3.3';
-import { countBand } from './checkview.js?v=3.3';
+import { h, append } from '../dom.js?v=4.1';
+import { app, rerender, goStep } from '../state.js?v=4.1';
+import { record, undo, nextUndo } from '../history.js?v=4.1';
+import { canonicalJSON, clone, applyGenerated } from '../model.js?v=4.1';
+import { checkTable, solveConflicts, unavoidableErrors } from '../check.js?v=4.1';
+import { RULE_BY_ID } from '../rules.js?v=4.1';
+import { ask, notify } from '../dialog.js?v=4.1';
+import { takeBackup, backupLines } from '../backup.js?v=4.1';
+import { timeLabel } from '../calendar.js?v=4.1';
+import { screenTitle } from './common.js?v=4.1';
+import { countBand } from './checkview.js?v=4.1';
 
 const QUICK_SECONDS = 60;
+// 元に戻すの履歴での呼び名（手順6 の「元に戻す」にも出る）
+const GENERATED_LABEL = '自動で作った表';
 
 // 1分で作るの秒。確かめの道具だけが、アドレスの ?seconds=5 のように短くする（3〜60秒）
 function quickSeconds() {
@@ -77,7 +80,7 @@ function run(d) {
   const seed = (d.month.runs.length % 1000) + 1;
   let worker;
   try {
-    worker = new Worker(new URL('../solver/worker.js?v=3.3', import.meta.url), { type: 'module' });
+    worker = new Worker(new URL('../solver/worker.js?v=4.1', import.meta.url), { type: 'module' });
   } catch {
     notify('計算の部品を動かせませんでした。ページを読み込み直して、もう一度ためしてください。', { kind: 'error', testid: 'run-error' });
     return;
@@ -122,7 +125,7 @@ function run(d) {
       rerender();
       return;
     }
-    const record = {
+    const run = {
       at: new Date().toISOString(),
       mode: 'quick',
       limit: seconds,
@@ -131,9 +134,9 @@ function run(d) {
       finished: r.stages.length > 0 && r.stages.every((s) => s.status === 'solved'),
       stages: r.stages.map((s) => ({ key: s.key, name: s.name, status: s.status, seconds: s.seconds })),
     };
-    commit((x) => {
-      applyGenerated(x, r.table, record);
-      record.totals = checkTable(x).totals;
+    record(GENERATED_LABEL, (x) => {
+      applyGenerated(x, r.table, run);
+      run.totals = checkTable(x).totals;
     }, { render: true });
     notify('シフト表を作りました。下の「作った結果」と、手順6 シフト表で見られます。', { kind: 'ok', testid: 'run-done' });
   };
@@ -170,6 +173,13 @@ async function start() {
     }
   }
   run(app.data);
+}
+
+// 作る前の表に戻す（いちばん新しい履歴が「自動で作った表」のとき）
+function undoGenerated() {
+  const res = undo();
+  if (!res) return;
+  notify(res.skipped ? `作る前の表に戻しました。作ったあとで変えた所 ${res.skipped}か所は、いまのままにしました。` : '作る前の表に戻しました。', { kind: 'ok', testid: 'run-undone' });
 }
 
 function modeCard() {
@@ -276,6 +286,9 @@ function resultCard(d) {
       { class: 'next-steps' },
       h('li', {}, h('button', { type: 'button', class: 'btn btn-primary', text: '手順6 シフト表で見る', testid: 'run-go-table', on: { click: () => goStep(6) } }), h('span', { class: 'help', text: '　エラーのあるマスに印が付きます。表の下の一覧から、そのマスへ移れます。' })),
       h('li', {}, h('button', { type: 'button', class: 'btn', text: 'もう一度作る', testid: 'run-again', on: { click: start } }), h('span', { class: 'help', text: '　少し違う表になることがあります（いまの表は控えに残します）。' })),
+      nextUndo()?.label === GENERATED_LABEL
+        ? h('li', {}, h('button', { type: 'button', class: 'btn', text: '作る前の表に戻す', testid: 'run-undo', on: { click: undoGenerated } }), h('span', { class: 'help', text: '　手順6 の「元に戻す」と同じです。作ったあとで手で変えたマスは、いまのままにします。' }))
+        : null,
     ),
   );
 }

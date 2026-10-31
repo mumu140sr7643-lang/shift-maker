@@ -20,6 +20,7 @@
   - 検査の画面（空の表の案内・6連勤以上の印と「悪くなりました」・一覧から動く・配置した人数・件数の帯と印が tools/count.mjs と同じ）
   - 決まりの強さ（手順1のチェックと1つの値・強さで件数が移る）と、希望だけで必ずエラーになるものの知らせ
   - 保存データが読めないとき、控えを残して知らせるか
+  - 元に戻す・やり直す（マス・入れ替え・必要人数・自動で作った表。1文字も同じに戻る・読み直すと履歴は消える）と、同じ日の2人の入れ替え（ドラッグ・小窓・固定は入れ替えない）
   - 自動で作る（中止で前のまま・計算中はほかを押せない・進み具合・件数の帯が check.js と同じ・置きかえる前の控えから戻る・記録 20 回まで・別のタブで変えたら上書きしない・作る前の確かめ）
 終わりに、結果を JSON で表示する。1 つでも失敗があれば、終わりのコードは 1。
 """
@@ -1206,6 +1207,123 @@ def scenario_generate(browser, base):
     ctx.close()
 
 
+def band_vs_check(page):
+    """件数の帯と、ページの中で check.js で数えた数が同じか"""
+    counted = page.evaluate(
+        """async () => {
+          const v = document.querySelector('[data-testid="app-version"]').textContent.replace('版 ', '');
+          const C = await import(`./js/check.js?v=${v}`);
+          return C.checkTable(JSON.parse(localStorage.getItem('shift-maker:data'))).totals;
+        }"""
+    )
+    band = {k: t(page, f"band-{k}").get_attribute("data-count") for k in ["six", "hard", "soft", "spare", "short"]}
+    want = {k: str(counted[x]) for k, x in [("six", "sixPlus"), ("hard", "hard"), ("soft", "soft"), ("spare", "spare"), ("short", "shortSlots")]}
+    return band == want, f"{band} / {want}"
+
+
+def scenario_undo(browser, base):
+    """4-1：元に戻す・やり直す（マス・入れ替え・必要人数・自動で作った表）と、同じ日の2人の入れ替え"""
+    url = base + "/app/?seconds=6"
+    ctx, page, errors = fresh_page(browser, base, 1280, "light")
+    page.goto(url)
+    t(page, "sample-restaurant").click()
+    t(page, "step-6").click()
+    ok(t(page, "undo").is_disabled() and t(page, "redo").is_disabled() and "戻せる変更はまだありません" in t(page, "undo-status").inner_text(), "はじめは、元に戻す・やり直すを押せず、理由が出る")
+    cell = lambda r, d: page.locator(f'[data-testid="table-cell"][data-row="{r}"][data-day="{d}"]')
+    value = lambda r, d: page.evaluate("([r, d]) => { const x = JSON.parse(localStorage.getItem('shift-maker:data')); return JSON.stringify(x.month.table[x.staff[r].id]?.[d] ?? null); }", [r, d])
+
+    # 1. マスを変える → 元に戻す → やり直す（1文字も同じ）
+    s0 = stored(page)
+    data = json.loads(s0)
+    sid = data["staff"][0]["shifts"][0]
+    cell(0, 1).click()
+    page.locator(f'[data-testid="pick-option"][data-kind="shift"][data-shift="{sid}"]').click()
+    s1 = stored(page)
+    ok(t(page, "undo").is_enabled() and "Aさんの" in t(page, "undo-status").inner_text(), "変えると「元に戻す」が押せ、何が戻るかが出る", t(page, "undo-status").inner_text())
+    t(page, "undo").click()
+    ok(stored(page) == s0, "元に戻すと、データが1文字も違わずに戻る")
+    ok("元に戻しました" in t(page, "undo-notice").first.inner_text(), "「元に戻しました」と知らせる")
+    t(page, "redo").click()
+    ok(stored(page) == s1, "やり直すと、変えたあとと1文字も同じになる")
+
+    # 2. ドラッグで入れ替え（同じ日のほかの人のマス）→ 件数の帯が数え直される → 元に戻す
+    sid2 = data["staff"][1]["shifts"][0]
+    cell(1, 4).click()
+    page.locator(f'[data-testid="pick-option"][data-kind="shift"][data-shift="{sid2}"]').click()
+    cell(2, 4).click()
+    page.locator('[data-testid="pick-option"][data-kind="off"]').click()
+    a, b = value(1, 4), value(2, 4)
+    s2 = stored(page)
+    cell(1, 4).drag_to(cell(2, 4))
+    ok(value(1, 4) == b and value(2, 4) == a, "ドラッグで、同じ日の2人のマスが入れ替わる", f"{value(1, 4)} {value(2, 4)}")
+    same, detail = band_vs_check(page)
+    ok(same, "入れ替えたあと、件数の帯が check.js と同じ", detail)
+    ok("入れ替え" in t(page, "undo-status").inner_text(), "入れ替えも元に戻せる")
+    t(page, "undo").click()
+    ok(stored(page) == s2, "入れ替えを元に戻すと、1文字も違わずに戻る")
+    same, detail = band_vs_check(page)
+    ok(same, "元に戻したあと、件数の帯が check.js と同じ", detail)
+    cell(1, 4).drag_to(cell(2, 5))
+    ok(stored(page) == s2, "ちがう日のマスへドラッグしても、入れ替えない")
+
+    # 3. 固定したマスは入れ替えない
+    cell(2, 4).click()
+    t(page, "pick-lock").check()
+    t(page, "picker-close").click()
+    s3 = stored(page)
+    cell(1, 4).drag_to(cell(2, 4))
+    ok(stored(page) == s3 and t(page, "swap-locked-notice").count() >= 1, "固定したマスへドラッグしても入れ替えず、理由を知らせる")
+
+    # 4. 日ごとの必要人数を変える → 元に戻す
+    need = page.locator('input.need-cell[data-row="0"][data-day="10"]')
+    old = need.input_value()
+    need.fill(str(int(old) + 3))
+    need.press("Enter")
+    ok("日ごとの必要人数" in t(page, "undo-status").inner_text(), "必要人数の変更も履歴に入る", t(page, "undo-status").inner_text())
+    t(page, "undo").click()
+    ok(page.locator('input.need-cell[data-row="0"][data-day="10"]').input_value() == old and stored(page) == s3, "必要人数の変更を元に戻すと、前の数に戻る")
+
+    # 5. 自動で作った表を元に戻す（作る前の表に戻る。作った記録も戻る）
+    t(page, "step-5").click()
+    t(page, "generate").click()
+    t(page, "generate-ok").click()
+    page.wait_for_selector('[data-testid="run-result"]', timeout=60000)
+    ok(t(page, "run-undo").count() == 1, "作ったあと、手順5 に「作る前の表に戻す」が出る")
+    t(page, "step-6").click()
+    ok("自動で作った表" in t(page, "undo-status").inner_text(), "手順6 の「元に戻す」で、自動で作った表の前に戻れる")
+    t(page, "undo").click()
+    ok(stored(page) == s3, "自動で作った表を元に戻すと、作る前と1文字も同じ（作った記録も戻る）")
+    t(page, "redo").click()
+    ok(len(json.loads(stored(page))["month"]["runs"]) == 1, "やり直すと、作った表と記録が戻る")
+
+    # 6. 読み直すと履歴は消える（データはそのまま）
+    s6 = stored(page)
+    page.goto(url)
+    page.wait_for_selector('[data-testid="undo"]')
+    ok(t(page, "undo").is_disabled() and stored(page) == s6, "読み直すと履歴は消え、データはそのまま")
+    ok(not errors, "エラー0 元に戻す", " / ".join(errors[:3]))
+    ctx.close()
+
+    # 7. スマホの幅：マスの小窓から入れ替える
+    ctx, page, errors = fresh_page(browser, base, 375, "dark")
+    page.goto(url)
+    t(page, "sample-care").click()
+    go(page, 6, 375)
+    data = json.loads(stored(page))
+    sid = data["staff"][1]["shifts"][0]
+    page.locator('[data-testid="table-cell"][data-row="1"][data-day="3"]').click()
+    page.locator(f'[data-testid="pick-option"][data-kind="shift"][data-shift="{sid}"]').click()
+    page.locator('[data-testid="table-cell"][data-row="1"][data-day="3"]').click()
+    page.locator('[data-testid="pick-swap"] > summary').click()
+    look(page, "dark 375 手順6 入れ替えの小窓", "step6-swap-dark-375")
+    page.locator(f'[data-testid="swap-option"][data-staff-id="{data["staff"][2]["id"]}"]').click()
+    d2 = json.loads(stored(page))
+    ok(d2["month"]["table"].get(data["staff"][2]["id"], {}).get("3", {}).get("shift") == sid and not d2["month"]["table"].get(data["staff"][1]["id"], {}).get("3"), "小窓の「この日の、ほかの人と入れ替える」で入れ替わる")
+    look(page, "dark 375 手順6 元に戻す", "step6-undo-dark-375")
+    ok(not errors, "エラー0 入れ替え（スマホ）", " / ".join(errors[:3]))
+    ctx.close()
+
+
 def main():
     with Server() as srv, sync_playwright() as pw:
         base = f"http://127.0.0.1:{srv.port}"
@@ -1230,6 +1348,7 @@ def main():
         scenario_text_safety(browser, base)
         scenario_broken(browser, base)
         scenario_generate(browser, base)
+        scenario_undo(browser, base)
         browser.close()
     print(json.dumps({"ブラウザ": CHANNEL or "chromium", "合格": len(results["pass"]), "不合格": results["fail"]}, ensure_ascii=False, indent=2))
     sys.exit(1 if results["fail"] else 0)
