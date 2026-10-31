@@ -4,12 +4,12 @@
 // 送る：{ type: 'progress', stage, count, name, phase, seconds, totals? } … 段の始まりと終わり（終わりには、その時点の表を check.js で数えた件数）
 //       { type: 'done', result }                                         … 作り終えた（作れなかったときも）
 //       { type: 'error', message }                                       … 計算の部品が動かなかった
-import highsLoader from '../../../vendor/highs/highs.mjs?v=5.2';
-import { solveStaged } from './stages.js?v=5.2';
-import { solveRepair } from './repair.js?v=5.2';
-import { checkTable } from '../check.js?v=5.2';
+import highsLoader from '../../../vendor/highs/highs.mjs?v=5.3';
+import { solveStaged } from './stages.js?v=5.3';
+import { solveRepair } from './repair.js?v=5.3';
+import { checkTable } from '../check.js?v=5.3';
 
-const WASM_URL = new URL('../../../vendor/highs/highs.wasm?v=5.2', import.meta.url).href;
+const WASM_URL = new URL('../../../vendor/highs/highs.wasm?v=5.3', import.meta.url).href;
 const loadHighs = () => highsLoader({ locateFile: () => WASM_URL });
 
 self.onmessage = async (e) => {

@@ -1,10 +1,16 @@
 // 手順5 の「詳しい機能」（v5。docs/見込みと説明の案.md）：作る前の見込み。
 // 5-1：日ごとの余裕（全体・時間帯・スキルごと）と、休める人が0人の日に出勤になる人。
 // 5-2：人手の余り・不足の表（最大流で「埋められる」）と、月の合計の人手（区分ごと）。
-import { h } from '../dom.js?v=5.2';
-import { monthDays } from '../model.js?v=5.2';
-import { weekdayOf, WEEKDAY_LABELS } from '../calendar.js?v=5.2';
-import { GROUPS, countedShift, groupOf, dayMargins, skillMargins, staffingTable, monthTotals } from '../outlook.js?v=5.2';
+// 5-3：どう作っても最低◯件の見込みと、直し方のボタン（外すと本当に減るものだけ）。
+// 「詳しい機能」は、開いたときに数える（開いているかは、画面を作り直しても残す）。
+import { h, append } from '../dom.js?v=5.3';
+import { app } from '../state.js?v=5.3';
+import { record } from '../history.js?v=5.3';
+import { notify } from '../dialog.js?v=5.3';
+import { RULE_BY_ID } from '../rules.js?v=5.3';
+import { monthDays } from '../model.js?v=5.3';
+import { weekdayOf, WEEKDAY_LABELS } from '../calendar.js?v=5.3';
+import { GROUPS, countedShift, groupOf, dayMargins, skillMargins, staffingTable, monthTotals, lowerBound, fixesFor, applyFix } from '../outlook.js?v=5.3';
 
 export function marginClass(m) {
   return m < 0 ? 'mg-neg' : m === 0 ? 'mg-zero' : m === 1 ? 'mg-one' : 'mg-ok';
@@ -111,16 +117,94 @@ function monthTotalCard(d) {
   ];
 }
 
+// 直し方のボタンを押したとき：外して、見込みを数え直し、言ったとおりに減ったか確かめる
+function pressFix(fix) {
+  record(fix.label, (x) => applyFix(x, fix), { render: true });
+  const now = lowerBound(app.data);
+  const said = `6連勤以上 最低${fix.after.six}件・絶対 最低${fix.after.hard}件`;
+  if (now.six === fix.after.six && now.hard === fix.after.hard) {
+    notify(`外しました。見込みが ${said} になりました。「元に戻す」（手順6）で戻せます。`, { kind: 'ok', testid: 'lb-fix-done' });
+  } else {
+    notify(`外しましたが、見込みが言っていた数（${said}）と違いました（いまは 6連勤以上 最低${now.six}件・絶対 最低${now.hard}件）。手順6 の「元に戻す」で戻せます。`, { kind: 'warn', testid: 'lb-fix-mismatch' });
+  }
+}
+
+// どう作っても最低◯件の見込み（案の 4-1・4-2）
+export function lowerBoundCard(d) {
+  const lb = lowerBound(d);
+  const items = lb.items.filter((it) => it.rule === 'sixPlus' || RULE_BY_ID[it.rule]);
+  return [
+    h('h3', { text: 'どう作っても最低◯件の見込み' }),
+    h('p', {
+      testid: 'lb-summary',
+      dataset: { six: String(lb.six), hard: String(lb.hard) },
+      text: lb.six + lb.hard
+        ? `希望と固定を守る表（自動で作る表・直す表）は、どう作っても 6連勤以上が最低${lb.six}件・絶対が最低${lb.hard}件 になります。`
+        : '希望と固定のとおりでも、必ず出る 6連勤以上・絶対のエラーはありません。',
+    }),
+    h('p', { class: 'help', text: '決まっているマス（希望・固定）と前の月の続きだけで必ず起きるものを、少なめに数えています（「できれば」は数えません）。手で希望と違うマスを入れた表は、代わりに「希望と違う」が出るので、この数とは比べられません。ボタンは、押す前に、外すと本当に最低件数が減ることを計算で確かめたものだけです。' }),
+    items.length
+      ? h(
+          'ul',
+          { class: 'lb-list' },
+          items.map((it) => {
+            const fixes = fixesFor(d, it, lb);
+            return h(
+              'li',
+              { class: 'lb-item', testid: 'lb-item', dataset: { rule: it.rule } },
+              h('span', { class: 'lb-rule', text: `${RULE_BY_ID[it.rule].name}：` }),
+              h('span', { text: it.text }),
+              fixes.length
+                ? h(
+                    'div',
+                    { class: 'row-actions' },
+                    fixes.map((f) => h('button', {
+                      type: 'button',
+                      class: 'btn btn-small',
+                      testid: 'lb-fix',
+                      text: `${f.label}（外すと、6連勤以上 最低${f.after.six}件・絶対 最低${f.after.hard}件）`,
+                      on: { click: () => pressFix(f) },
+                    })),
+                  )
+                : null,
+            );
+          }),
+        )
+      : null,
+  ];
+}
+
+let openNow = false;
+
 export function outlookCard(d) {
   if (!d.staff.length || !d.settings.shifts.length) return null;
+  const body = h('div', { class: 'outlook-body' });
+  const fill = () => {
+    if (body.childElementCount) return;
+    append(body, ...outlookBody(d));
+  };
+  // 開くボタンを押したその時に中身を入れる（toggle の知らせは少し遅れて届くため）
+  const det = h(
+    'details',
+    { class: 'card outlook', testid: 'outlook-details', open: openNow },
+    h('summary', { text: '詳しい機能：作る前の見込み', on: { click: fill } }),
+    body,
+  );
+  det.addEventListener('toggle', () => {
+    openNow = det.open;
+    if (det.open) fill();
+  });
+  if (openNow) fill();
+  return det;
+}
+
+function outlookBody(d) {
   const { month } = d.month;
   const table = marginTable(d);
   const whoOf = (ids) => ids.map((id) => d.staff.find((p) => p.id === id)?.name || '名前なし').join('・');
   const zero = table.rows[0].days.filter((m) => m.margin <= 0);
-  return h(
-    'details',
-    { class: 'card outlook', testid: 'outlook-details' },
-    h('summary', { text: '詳しい機能：作る前の見込み' }),
+  return [
+    ...lowerBoundCard(d),
     h('h3', { text: '日ごとの余裕（あと何人休めるか）' }),
     h('p', { class: 'help', text: 'その日に出られる人の数 − その日の必要人数 です（時間帯の行は、その時間帯のシフトに入れる人と必要人数。スキルの行は、そのスキルを持ち、その時間帯に入れる人と最低人数）。希望・固定の休み、夜勤の次の日の明けは「出られない」に数えます。0 の日は赤、1 の日は黄色、マイナスは濃い赤です。' }),
     table.el,
@@ -133,5 +217,5 @@ export function outlookCard(d) {
       : h('p', { class: 'help', testid: 'zero-days-none', text: '休める人が0人の日はありません。' }),
     ...monthTotalCard(d),
     ...staffingCard(d),
-  );
+  ];
 }

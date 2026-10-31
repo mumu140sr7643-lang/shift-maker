@@ -1,9 +1,9 @@
 // その場の知らせ（5-1。説明書 5 節）：データを変えるたびに、変える前と後の「あと何人休めるか」を比べ、
 // 新しく 0 人以下の日・きつい期間ができたら、画面の下に何を変えたからかを書いて知らせる。
 // 変えて元に戻ったら（その日がもう 0 人でない・その期間がもう無い）知らせを消す。
-import { watchCommits } from '../state.js?v=5.2';
-import { notify } from '../dialog.js?v=5.2';
-import { dayMargins, newTightness, tightRanges } from '../outlook.js?v=5.2';
+import { watchCommits } from '../state.js?v=5.3';
+import { notify } from '../dialog.js?v=5.3';
+import { dayMargins, newTightness, tightRanges } from '../outlook.js?v=5.3';
 
 const active = []; // [{ el, zeroDays, ranges }]
 

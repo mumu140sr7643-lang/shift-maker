@@ -20,6 +20,8 @@
   - 検査の画面（空の表の案内・6連勤以上の印と「悪くなりました」・一覧から動く・配置した人数・件数の帯と印が tools/count.mjs と同じ）
   - 決まりの強さ（手順1のチェックと1つの値・強さで件数が移る）と、希望だけで必ずエラーになるものの知らせ
   - 保存データが読めないとき、控えを残して知らせるか
+  - アプリの「表示」で明るい・暗いを選んだときも（ブラウザの設定との6通り）、読みにくい字 0・印の枠が背景と 3:1 以上・余り日の縞の上の字 4.5:1 以上
+  - 最低◯件の見込み（直し方のボタンで減る・元に戻せる・届いているの文）・帯の下の「少なくとも◯コマ」と6行・理由を見る（表を変えない）
   - あと何人休めるか（手順4 の下の行の数・色・文・きつい期間）・その場の知らせ（取り消す・元に戻ったら消える）・手順5 の日ごとの余裕
   - Excel に出す（マスの記号と色・集計表・件数が画面と同じ・式が入らない）・CSV に出す（BOM・式にならない・カンマと引用符）・手順6 の集計表・ファイルの名前
   - エラーを自動で直す（上限ごとの案・表で見る・反映・元に戻す・必ず変えるマスが多い上限）と、途中から作り直す（残す日は同じ・元に戻せる・残す日に担当外があれば止める）
@@ -1694,6 +1696,120 @@ def scenario_margin(browser, base):
         ctx.close()
 
 
+def scenario_lower_bound(browser, base):
+    """5-3：最低◯件の見込み・直し方のボタン（押すと減る・元に戻せる）・届いているの文・帯の下の数と6行・理由を見る（表を変えない）"""
+    url = base + "/app/?seconds=6"
+    for width, scheme in [(1280, "light"), (375, "dark")]:
+        ctx, page, errors = fresh_page(browser, base, width, scheme)
+        page.goto(url)
+        t(page, "sample-restaurant").click()
+        go(page, 5, width)
+        page.locator('[data-testid="outlook-details"] > summary').click()
+        summ = t(page, "lb-summary")
+        ok(summ.get_attribute("data-hard") == "2" and summ.get_attribute("data-six") == "0", f"{scheme} {width}px 飲食店の見本の見込みは 絶対 最低2件・6連勤以上 0件", summ.inner_text()[:60])
+        ok(t(page, "lb-item").count() == 1 and t(page, "lb-fix").count() == 3, f"{scheme} {width}px 理由と、外すと減る直し方のボタンが出る", f"{t(page, 'lb-item').count()} {t(page, 'lb-fix').count()}")
+        look(page, f"{scheme} {width}px 手順5 最低件数の見込み", f"step5-lb-{scheme}-{width}")
+        before = stored(page)
+        t(page, "lb-fix").first.click()
+        ok(t(page, "lb-fix-done").count() == 1 and t(page, "lb-summary").get_attribute("data-hard") == "1", f"{scheme} {width}px 直し方のボタンを押すと、言ったとおりに見込みが減る", t(page, "lb-summary").get_attribute("data-hard"))
+        ok(t(page, "outlook-details").get_attribute("open") is not None, f"{scheme} {width}px 押したあとも「詳しい機能」は開いたまま")
+        go(page, 6, width)
+        ok("希望" in t(page, "undo-status").inner_text(), f"{scheme} {width}px 外した希望は、元に戻すの履歴に入る", t(page, "undo-status").inner_text()[:60])
+        t(page, "undo").click()
+        same = json.dumps(json.loads(stored(page)), sort_keys=True) == json.dumps(json.loads(before), sort_keys=True)
+        ok(same, f"{scheme} {width}px 元に戻すと、外した希望が戻り、中身が前と同じになる（並び順は変わることがある）")
+        # 作る → 見込みに届いている／帯の下の数と6行／理由を見る
+        go(page, 5, width)
+        t(page, "generate").click()
+        page.wait_for_selector('[data-testid="run-result"]', timeout=60000)
+        ok(t(page, "lb-reached").count() == 1, f"{scheme} {width}px 作った表が見込みに届いていると、そう書く")
+        go(page, 6, width)
+        box = t(page, "shortage-box")
+        ok(box.count() == 1 and box.get_attribute("data-least") == "2" and "少なくとも2コマ" in t(page, "shortage-head").inner_text(), f"{scheme} {width}px 帯の下に「予定どおり休みを取らせると、少なくとも2コマ足りません」", t(page, "shortage-head").inner_text() if box.count() else "")
+        ok(t(page, "shortage-line").count() == 2, f"{scheme} {width}px 足りない日とシフトを、多い順に並べる", str(t(page, "shortage-line").count()))
+        held = stored(page)
+        t(page, "reason-open").first.click()
+        items = t(page, "reason-item")
+        ok(items.count() >= 3 and "公休の希望" in t(page, "reason-dialog").inner_text() and "枠なので" in t(page, "reason-dialog").inner_text(), f"{scheme} {width}px 理由を見ると、人ごとの理由が出る（休みの希望・区分の枠）", str(items.count()))
+        look(page, f"{scheme} {width}px 手順6 理由を見る", f"step6-reasons-{scheme}-{width}")
+        t(page, "reason-close").click()
+        ok(stored(page) == held, f"{scheme} {width}px 理由を見ても、データは1文字も変わらない")
+        ok(not errors, f"エラー0 最低件数・理由 {scheme} {width}px", " / ".join(errors[:3]))
+        ctx.close()
+
+
+MARK_JS = r"""
+() => {
+  const parse = (c) => {
+    const m = c.match(/rgba?\(([^)]+)\)/);
+    if (!m) return null;
+    const [r, g, b, a = 1] = m[1].split(',').map(Number);
+    return { r, g, b, a };
+  };
+  const lum = ({ r, g, b }) => {
+    const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+    return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+  };
+  const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
+  const bgOf = (el) => {
+    for (let e = el; e; e = e.parentElement) {
+      const c = parse(getComputedStyle(e).backgroundColor);
+      if (c && c.a > 0) return c;
+    }
+    return { r: 255, g: 255, b: 255 };
+  };
+  const hex = (h) => { h = h.trim().replace('#', ''); return { r: parseInt(h.slice(0, 2), 16), g: parseInt(h.slice(2, 4), 16), b: parseInt(h.slice(4, 6), 16) }; };
+  const out = {};
+  for (const cls of ['m-six', 'm-hard', 'm-soft']) {
+    const els = [...document.querySelectorAll(`.grid-cell.${cls}`)].slice(0, 30);
+    if (!els.length) { out[cls] = null; continue; }
+    out[cls] = Math.min(...els.map((el) => {
+      const border = parse(getComputedStyle(el).borderTopColor);
+      return Math.min(ratio(border, bgOf(el)), ratio(border, bgOf(el.parentElement)));
+    }));
+  }
+  const sp = document.querySelector('.grid-cell.k-spare');
+  if (sp) {
+    const text = parse(getComputedStyle(sp).color);
+    const root = getComputedStyle(document.documentElement);
+    out.spare = Math.min(ratio(text, hex(root.getPropertyValue('--k-spare-bg'))), ratio(text, hex(root.getPropertyValue('--k-spare-stripe'))));
+  } else out.spare = null;
+  return out;
+}
+"""
+
+
+def scenario_theme(browser, base):
+    """アプリの「表示」で明るい・暗いを選んだときも、ブラウザの設定で暗いときと同じ見え方か（字のコントラスト・印の枠 3:1・余り日の縞の上の字）"""
+    for scheme, choice in [("light", "auto"), ("dark", "auto"), ("light", "dark"), ("dark", "light"), ("light", "light"), ("dark", "dark")]:
+        ctx, page, errors = fresh_page(browser, base, 1280, scheme)
+        t(page, "sample-restaurant").click()
+        page.evaluate(
+            """() => {
+              const d = JSON.parse(localStorage.getItem('shift-maker:data'));
+              const sh = (sym) => d.settings.shifts.find((s) => s.symbol === sym).id;
+              const [a, b, c, e] = [d.staff[0], d.staff[1], d.staff[2], d.staff[3]];
+              d.month.table[a.id] = Object.fromEntries([1, 2, 3, 4, 5, 6].map((day) => [day, { kind: 'shift', shift: sh('朝') }]));
+              d.month.table[b.id] = { 12: { kind: 'shift', shift: sh('夜') }, 13: { kind: 'shift', shift: sh('朝') } };
+              d.month.table[c.id] = { 2: { kind: 'spare' } };
+              d.month.table[e.id] = { 19: { kind: 'off' }, 20: { kind: 'shift', shift: sh('朝') }, 21: { kind: 'off' } };
+              localStorage.setItem('shift-maker:data', JSON.stringify(d));
+            }"""
+        )
+        page.goto(base + "/app/")
+        page.wait_for_selector('[data-testid="screen-title"]')
+        if choice != "auto":
+            t(page, "theme-select").select_option(choice)
+        t(page, "step-6").click()
+        label = f"ブラウザ{scheme}・表示{choice}"
+        look(page, f"{label} 手順6", f"theme-{scheme}-{choice}")
+        marks = page.evaluate(MARK_JS)
+        bad = {k: (round(v, 2) if v is not None else None) for k, v in marks.items() if v is None or v < (4.5 if k == "spare" else 3)}
+        ok(not bad, f"{label} 印の枠が背景と 3:1 以上・余り日の縞の上の字が 4.5:1 以上", json.dumps({k: (round(v, 2) if v else v) for k, v in marks.items()}, ensure_ascii=False))
+        ok(not errors, f"エラー0 {label}", " / ".join(errors[:3]))
+        ctx.close()
+
+
 def main():
     with Server() as srv, sync_playwright() as pw:
         base = f"http://127.0.0.1:{srv.port}"
@@ -1722,6 +1838,8 @@ def main():
         scenario_repair(browser, base)
         scenario_export(browser, base)
         scenario_margin(browser, base)
+        scenario_lower_bound(browser, base)
+        scenario_theme(browser, base)
         browser.close()
     print(json.dumps({"ブラウザ": CHANNEL or "chromium", "合格": len(results["pass"]), "不合格": results["fail"]}, ensure_ascii=False, indent=2))
     sys.exit(1 if results["fail"] else 0)

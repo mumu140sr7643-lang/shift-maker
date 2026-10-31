@@ -1030,5 +1030,57 @@
  {
   "id": "staffing-cut",
   "find": "staffing-cut"
+ },
+ {
+  "id": "lb-summary",
+  "find": "lb-summary"
+ },
+ {
+  "id": "lb-item",
+  "find": "lb-item"
+ },
+ {
+  "id": "lb-fix",
+  "find": "lb-fix"
+ },
+ {
+  "id": "lb-fix-done",
+  "find": "lb-fix-done"
+ },
+ {
+  "id": "lb-fix-mismatch",
+  "find": "lb-fix-mismatch"
+ },
+ {
+  "id": "lb-reached",
+  "find": "lb-reached"
+ },
+ {
+  "id": "shortage-box",
+  "find": "shortage-box"
+ },
+ {
+  "id": "shortage-head",
+  "find": "shortage-head"
+ },
+ {
+  "id": "shortage-line",
+  "find": "shortage-line"
+ },
+ {
+  "id": "reason-open",
+  "find": "reason-open"
+ },
+ {
+  "id": "reason-dialog",
+  "find": "reason-dialog"
+ },
+ {
+  "id": "reason-item",
+  "find": "reason-item"
+ },
+ {
+  "id": "reason-close",
+  "find": "reason-close"
  }
 ]

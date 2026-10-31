@@ -1,13 +1,14 @@
 // 元に戻す・やり直すの中身（4-1。説明書 6 節）。画面には触らない。node からも使う。
 // 変える前と後の「見張る所」を写し、違う所だけを変更として持つ。
 // 戻すときは「いまもその値のままの所」だけ戻す（そのあと別の操作で変えた所は、いまのまま）。
-import { shiftById, monthDays } from './model.js?v=5.2';
+import { shiftById, monthDays } from './model.js?v=5.3';
 
-// 見張る所：月の表のマス・マスの印（固定・手で変えた）・日ごとの必要人数・作った記録
-//   depth は、その下の何段目を1つの値として比べるか（table[人][日]・needOverride[シフト][区分][日]・runs はまるごと）
+// 見張る所：月の表のマス・マスの印（固定・手で変えた）・希望（5-3 の直し方のボタンで外すため）・日ごとの必要人数・作った記録
+//   depth は、その下の何段目を1つの値として比べるか（table[人][日]・requests[人][日]・needOverride[シフト][区分][日]・runs はまるごと）
 const ROOTS = [
   { key: 'table', depth: 2 },
   { key: 'marks', depth: 2 },
+  { key: 'requests', depth: 2 },
   { key: 'needOverride', depth: 3 },
   { key: 'runs', depth: 0 },
 ];
@@ -78,10 +79,10 @@ function setAt(obj, path, value) {
 
 // その変更を、いまのデータに戻せるか（人・日・シフトが、まだあるか）
 function stillFits(data, ch, value) {
-  if (ch.root === 'table' || ch.root === 'marks') {
+  if (ch.root === 'table' || ch.root === 'marks' || ch.root === 'requests') {
     const [pid, day] = ch.path;
     if (!data.staff.some((p) => p.id === pid) || Number(day) < 1 || Number(day) > monthDays(data)) return false;
-    if (ch.root === 'table' && value?.kind === 'shift' && !shiftById(data, value.shift)) return false;
+    if ((ch.root === 'table' || ch.root === 'requests') && value?.kind === 'shift' && !shiftById(data, value.shift)) return false;
   }
   if (ch.root === 'needOverride' && !shiftById(data, ch.path[0])) return false;
   return true;

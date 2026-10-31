@@ -77,12 +77,6 @@
     --k-half-bg: #273a1f;
     --k-ake-bg: #34383e;
     --k-spare-bg: #173b38;
-  --mk-six: #ff5c5c;
-  --mg-neg-bg: #ff8a8a;
-  --mg-neg-text: #2b0606;
-  --mk-hard: #ffa198;
-  --mk-soft: #e8c15a;
-  --k-spare-stripe: #24524d;
     --mk-six: #ff5c5c;
     --mg-neg-bg: #ff8a8a;
     --mg-neg-text: #2b0606;
@@ -127,9 +121,13 @@
   --sun: #ff9a8f;
   --sat: #8ab8ff;
   --backdrop: rgba(0, 0, 0, 0.6);
-  color-scheme: dark;
+  --mk-six: #ff5c5c;
+  --mk-hard: #ffa198;
+  --mk-soft: #e8c15a;
+  --k-spare-stripe: #24524d;
   --mg-neg-bg: #ff8a8a;
   --mg-neg-text: #2b0606;
+  color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
@@ -674,6 +672,17 @@ details.outlook h3 { margin-top: 12px; }
 .staffing-table thead th { background: var(--surface-2); text-align: center; }
 .staffing-table th[scope="row"] { text-align: left; white-space: nowrap; background: var(--surface); }
 .staffing-table td:nth-child(6) { text-align: left; min-width: 8em; }
+.lb-list { list-style: none; padding: 0; margin: 8px 0; display: grid; gap: 8px; }
+.lb-item { padding: 8px 10px; border-radius: 6px; border-left: 4px solid var(--mk-hard); background: var(--surface-2); }
+.lb-rule { font-weight: 700; }
+.shortage-box { margin: 0 0 12px; padding: 10px 12px; border-radius: 8px; border-left: 5px solid var(--mk-hard); background: var(--error-bg); color: var(--error-text); }
+.shortage-box h3 { margin: 0 0 4px; font-size: 1rem; }
+.shortage-box ul { margin: 4px 0 0; padding-left: 1.2em; }
+.shortage-box li { margin: 4px 0; }
+.shortage-box .help { color: var(--error-text); }
+.reason-list { list-style: none; padding: 0; margin: 8px 0; display: grid; gap: 6px; }
+.reason-list li { padding: 6px 8px; border-radius: 6px; background: var(--surface-2); }
+.reason-list li[data-status="can"], .reason-list li[data-status="add"] { border-left: 4px solid var(--primary); }
 .staffing-table td.is-short { color: var(--error-text); background: var(--error-bg); font-weight: 700; }
 .margin-summary ul { margin: 4px 0 0; padding-left: 1.2em; }
 

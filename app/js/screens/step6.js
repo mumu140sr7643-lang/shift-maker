@@ -1,22 +1,23 @@
 // 手順6 シフト表。マスを押すと、入れるものを選ぶ小窓が出る。変えるたびに決まりを検査し直し、印・件数の帯・一覧を直す。
 // 変えた所は履歴（history.js）に積み、「元に戻す」「やり直す」で戻せる。同じ日の2人のマスは、ドラッグか小窓で入れ替えられる。
 // 「エラーを自動で直す」の案を見ているあいだは、表を案の表に切りかえて見せる（repairview.js）。
-import { h, append } from '../dom.js?v=5.2';
-import { app } from '../state.js?v=5.2';
+import { h, append } from '../dom.js?v=5.3';
+import { app } from '../state.js?v=5.3';
 import {
   REST_KINDS, shiftById, cellOf, marksOf, requestOf, setCellByHand, setLock, swapCells, cellSymbol, cellName,
-} from '../model.js?v=5.2';
-import { record, undo, redo, nextUndo, nextRedo } from '../history.js?v=5.2';
-import { weekdayOf, WEEKDAY_LABELS } from '../calendar.js?v=5.2';
-import { notify } from '../dialog.js?v=5.2';
-import { checkTable } from '../check.js?v=5.2';
-import { screenTitle } from './common.js?v=5.2';
-import { staffGrid } from './staffgrid.js?v=5.2';
-import { needGrid } from './needgrid.js?v=5.2';
-import { markIndex, markClasses, markBadges, countBand, errorList, worsened } from './checkview.js?v=5.2';
-import { currentPreview, previewCard, openRepair, openRestart, repairBlockReason } from './repairview.js?v=5.2';
-import { summarize, summaryColumns } from '../summary.js?v=5.2';
-import { exportCsv, exportExcel } from '../files.js?v=5.2';
+} from '../model.js?v=5.3';
+import { record, undo, redo, nextUndo, nextRedo } from '../history.js?v=5.3';
+import { weekdayOf, WEEKDAY_LABELS } from '../calendar.js?v=5.3';
+import { notify } from '../dialog.js?v=5.3';
+import { checkTable } from '../check.js?v=5.3';
+import { screenTitle } from './common.js?v=5.3';
+import { staffGrid } from './staffgrid.js?v=5.3';
+import { needGrid } from './needgrid.js?v=5.3';
+import { markIndex, markClasses, markBadges, countBand, errorList, worsened } from './checkview.js?v=5.3';
+import { currentPreview, previewCard, openRepair, openRestart, repairBlockReason } from './repairview.js?v=5.3';
+import { summarize, summaryColumns } from '../summary.js?v=5.3';
+import { exportCsv, exportExcel } from '../files.js?v=5.3';
+import { staffingTable, reasonsFor } from '../outlook.js?v=5.3';
 
 const SVG = 'http://www.w3.org/2000/svg';
 const NL = String.fromCharCode(10); // マウスを置いたときの文の改行
@@ -296,6 +297,74 @@ function doExportCsv() {
   notify(`「${name}」を書き出しました（ブラウザのダウンロードの場所に入ります）。`, { kind: 'ok', testid: 'export-csv-notice' });
 }
 
+// 不足の理由（5-3。「理由を見る」）：写しの表で入れてみて、増えるエラーを理由にする（本物の表は変えない）
+function openReasons(d, day, shiftId) {
+  const s = shiftById(d, shiftId);
+  const list = reasonsFor(d, day, shiftId);
+  const dlg = h('dialog', { class: 'dialog', testid: 'reason-dialog', 'aria-labelledby': 'reason-title' });
+  const close = () => {
+    dlg.close();
+    dlg.remove();
+  };
+  append(
+    dlg,
+    h('h2', { id: 'reason-title', text: `${d.month.month}月${day}日の「${s?.symbol ?? '?'}」に入っていない理由` }),
+    h('p', { class: 'help', text: '人ごとに、なぜこのシフトに入っていないかです。決まっていない人は、写しの表に入れて検査し、増えるエラーを理由にしています（本物の表は変えていません）。「入れられます」の人は、マスを押して変えられます。' }),
+    list.length
+      ? h('ul', { class: 'reason-list' }, list.map((r) => h('li', { testid: 'reason-item', dataset: { status: r.status, staffId: r.pid } }, h('strong', { text: `${r.name}：` }), r.text)))
+      : h('p', { class: 'help', text: 'ほかに入れられる人はいません。' }),
+    h('div', { class: 'dialog-buttons' }, h('button', { type: 'button', class: 'btn', text: '閉じる', testid: 'reason-close', on: { click: close } })),
+  );
+  dlg.addEventListener('cancel', (e) => {
+    e.preventDefault();
+    close();
+  });
+  document.body.appendChild(dlg);
+  dlg.showModal();
+}
+
+// 件数の帯の下の6行（5-3）：予定どおり休みを取らせると、少なくとも◯コマ足りない（最大流で数える。案の B）と、
+// 人員不足・公休を削って埋めている人を、多い順に6行まで
+function shortageBox(d, result) {
+  if (result.tableEmpty) return null;
+  const shorts = result.items.filter((it) => it.rule === 'shortage');
+  const cuts = result.items.filter((it) => it.rule === 'offShort');
+  if (!shorts.length && !cuts.length) return null;
+  const all = staffingTable(d).find((r) => r.key === 'all');
+  const least = all ? all.short : 0;
+  const { month } = d.month;
+  const lines = [
+    ...shorts.map((it) => ({
+      amount: it.amount,
+      el: h(
+        'li',
+        { testid: 'shortage-line', dataset: { kind: 'shortage' } },
+        `${month}月${it.day}日の「${shiftById(d, it.shift)?.symbol ?? '?'}」が${it.amount}人足りません `,
+        h('button', { type: 'button', class: 'btn btn-small', text: '理由を見る', testid: 'reason-open', dataset: { day: String(it.day), shift: it.shift }, on: { click: () => openReasons(d, it.day, it.shift) } }),
+      ),
+    })),
+    ...cuts.map((it) => ({
+      amount: it.amount,
+      el: h('li', { testid: 'shortage-line', dataset: { kind: 'offShort' }, text: `${d.staff.find((p) => p.id === it.staff)?.name || '名前なし'}さんの公休を${it.amount}日削って、出勤で埋めています` }),
+    })),
+  ].sort((a, b) => b.amount - a.amount);
+  return h(
+    'div',
+    { class: 'shortage-box', testid: 'shortage-box', dataset: { least: String(least) } },
+    h('h3', {
+      testid: 'shortage-head',
+      text: least > 0
+        ? `予定どおり休みを取らせると、少なくとも${least}コマ足りません。`
+        : result.totals.shortSlots > 0
+          ? `いまの表は${result.totals.shortSlots}コマ足りません（予定どおり休んでも、埋められる見込みはあります）。`
+          : '公休を削って出勤している人がいます（予定どおり休ませても、足りなくならない見込みです）。',
+    }),
+    least > 0 ? h('p', { class: 'help', text: '人を日と枠に1人1日1つずつ割り当てて数えた、少なめの数です（連勤などの日をまたぐ決まりは見ていません）。くわしくは 手順5 の「詳しい機能」の「人手の余り・不足の表」。' }) : null,
+    h('ul', {}, lines.slice(0, 6).map((x) => x.el)),
+    lines.length > 6 ? h('p', { class: 'help', text: `ほか ${lines.length - 6}件（下のエラーの一覧にあります）` }) : null,
+  );
+}
+
 // 元に戻す・やり直すの結果の知らせ
 function tellUndo(res, what) {
   if (!res) return;
@@ -379,6 +448,7 @@ export function renderStep6(el) {
     const why = repairBlockReason(result);
     bandBox.append(
       countBand(result, { onOpen: openDetail }),
+      ...[pv ? null : shortageBox(app.data, result)].filter(Boolean),
       h(
         'div',
         { class: 'band-actions' },

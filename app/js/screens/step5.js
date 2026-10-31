@@ -1,18 +1,19 @@
 // 手順5 自動で作る：1分で作る（おためし）。計算は裏方（solver/worker.js の Web Worker）で行うので、画面は固まらない。
 // 計算は写しで行い、終わってから、そのあいだにデータが変わっていないことを確かめて本物の表に入れる。
-import { h, append } from '../dom.js?v=5.2';
-import { app, rerender, goStep } from '../state.js?v=5.2';
-import { record, undo, nextUndo } from '../history.js?v=5.2';
-import { canonicalJSON, clone, applyGenerated } from '../model.js?v=5.2';
-import { checkTable, solveConflicts, unavoidableErrors } from '../check.js?v=5.2';
-import { RULE_BY_ID } from '../rules.js?v=5.2';
-import { ask, notify } from '../dialog.js?v=5.2';
-import { takeBackup, backupLines } from '../backup.js?v=5.2';
-import { timeLabel } from '../calendar.js?v=5.2';
-import { screenTitle } from './common.js?v=5.2';
-import { countBand } from './checkview.js?v=5.2';
-import { startSolving, isSolving, quickSeconds } from './solving.js?v=5.2';
-import { outlookCard } from './outlookview.js?v=5.2';
+import { h, append } from '../dom.js?v=5.3';
+import { app, rerender, goStep } from '../state.js?v=5.3';
+import { record, undo, nextUndo } from '../history.js?v=5.3';
+import { canonicalJSON, clone, applyGenerated } from '../model.js?v=5.3';
+import { checkTable, solveConflicts, unavoidableErrors } from '../check.js?v=5.3';
+import { RULE_BY_ID } from '../rules.js?v=5.3';
+import { ask, notify } from '../dialog.js?v=5.3';
+import { takeBackup, backupLines } from '../backup.js?v=5.3';
+import { timeLabel } from '../calendar.js?v=5.3';
+import { screenTitle } from './common.js?v=5.3';
+import { countBand } from './checkview.js?v=5.3';
+import { startSolving, isSolving, quickSeconds } from './solving.js?v=5.3';
+import { outlookCard } from './outlookview.js?v=5.3';
+import { lowerBound } from '../outlook.js?v=5.3';
 
 // 元に戻すの履歴での呼び名（手順6 の「元に戻す」にも出る）
 const GENERATED_LABEL = '自動で作った表';
@@ -175,6 +176,14 @@ function makeCard(d, canMake) {
   );
 }
 
+// 見込みの最低件数に届いているか（5-3。説明書 10 節：届いている月は、それ以上減らせない）
+function reached(d, res) {
+  if (res.tableEmpty) return null;
+  const lb = lowerBound(d);
+  if (res.totals.sixPlus !== lb.six || res.totals.hard !== lb.hard) return null;
+  return h('p', { class: 'help', testid: 'lb-reached', text: `見込みの最低件数（6連勤以上 ${lb.six}件・絶対 ${lb.hard}件）に届いています。希望と固定を変えないかぎり、これ以上は減らせません。` });
+}
+
 function resultCard(d) {
   const r = d.month.runs[d.month.runs.length - 1];
   if (!r || typeof r !== 'object') return null;
@@ -202,6 +211,7 @@ function resultCard(d) {
     h('p', { testid: 'run-status', text: status }),
     h('h3', { text: 'いまのシフト表の件数' }),
     countBand(res),
+    reached(d, res),
     edited ? h('p', { class: 'help', testid: 'run-edited', text: '作ったあとに手で変えたマスがあります。件数は、いまの表で数えています。' }) : null,
     h('h3', { text: 'つぎにやること' }),
     h(

@@ -1,6 +1,8 @@
 // 見込みと説明（v5。docs/見込みと説明の案.md）の数え方。画面には触らない。node からも使う。
 // 5-1：その日に出られる人・あと何人休めるか（日ごとの余裕）・きつい期間・新しくできた 0 人の日ときつい期間。
-import { monthDays, cellOf, shiftById, needRows, needOn } from './model.js?v=5.2';
+import { monthDays, cellOf, shiftById, needRows, needOn, clone, setRequest, setLock, setCellByHand, cellName } from './model.js?v=5.3';
+import { unavoidableErrors, checkTable } from './check.js?v=5.3';
+import { strengthOf, RULE_BY_ID } from './rules.js?v=5.3';
 
 export const GROUPS = ['early', 'late', 'night'];
 
@@ -71,7 +73,8 @@ export function skillMargins(data) {
       if (!min) continue;
       const days = [];
       for (let day = 1; day <= N; day += 1) {
-        const people = data.staff.filter((p) => p.skills.includes(k.id) && openShifts(data, p, day).some((s) => groupOf(s) === g)).map((p) => p.id);
+        // スキルの時間帯は、検査（スキル不足）と同じく、シフトの時間帯のグループの設定で見る（夜勤を「夜」に読みかえない）
+        const people = data.staff.filter((p) => p.skills.includes(k.id) && openShifts(data, p, day).some((s) => s.group === g)).map((p) => p.id);
         days.push({ day, available: people.length, need: min, margin: people.length - min, people });
       }
       out.push({ skill: k.id, group: g, days });
@@ -208,7 +211,7 @@ export function staffingRows(data) {
       out.push({
         key: `skill:${k.id}:${g}`,
         label: `${k.name}（${names[g]}）`,
-        slots: [{ accepts: (p, open) => p.skills.includes(k.id) && open.some((s) => groupOf(s) === g), need: () => min }],
+        slots: [{ accepts: (p, open) => p.skills.includes(k.id) && open.some((s) => s.group === g), need: () => min }],
       });
     }
   }
@@ -312,4 +315,233 @@ export function monthTotals(data) {
     combined: { need: need.all, available: null },
     total: { need: need.full + need.part + need.all, available: avail.full + avail.part },
   };
+}
+
+// ---------- 5-3 どう作っても最低◯件の見込み ----------
+// 希望と固定を守る表（自動で作る・直す表）が、どう作っても持つ 6連勤以上と「絶対」の件数の、少なめの数（案の 4-1）。
+// 決まっているマスだけで必ず起きるものだけを数える。
+// 返す：{ items: [{ rule, count, text, refs: [{ pid, day }] }], byRule: { rule: 件数 }, six, hard }
+//   refs は、直し方のボタンの候補になる「決まっているマス」（希望・固定）
+
+const restLike = new Set(['off', 'paid', 'half', 'spare', 'ake']);
+
+function fixedRefs(data, pid, days) {
+  return days.filter((day) => fixedValue(data, pid, day) !== undefined).map((day) => ({ pid, day }));
+}
+
+// 決まっていない日のうち、前の日が決まった夜勤で明けになる日か
+function forcedAke(data, p, day) {
+  if (fixedValue(data, p.id, day) !== undefined) return false;
+  const prev = day === 1 ? (p.prevLastShift ? { kind: 'shift', shift: p.prevLastShift } : null) : fixedValue(data, p.id, day - 1);
+  return prev?.kind === 'shift' && Boolean(shiftById(data, prev.shift)?.night);
+}
+
+export function lowerBound(data) {
+  const N = monthDays(data);
+  const md = (d) => `${data.month.month}月${d}日`;
+  const who = (pid) => `${data.staff.find((p) => p.id === pid)?.name || '名前なし'}さん`;
+  const items = [];
+  const S = (id) => strengthOf(data, id);
+  const un = unavoidableErrors(data);
+  // 6連勤以上・連勤超過：あいだが全部「決まっていないマス」の続きどうしは、作った表でつながって1件になりうるので、1つにまとめる
+  for (const rule of ['sixPlus', 'overStreak']) {
+    if (S(rule) === 'off') continue;
+    const byStaff = new Map();
+    for (const it of un.filter((x) => x.rule === rule)) {
+      if (!byStaff.has(it.staff)) byStaff.set(it.staff, []);
+      byStaff.get(it.staff).push(it);
+    }
+    for (const [pid, list] of byStaff) {
+      list.sort((a, b) => a.from - b.from);
+      let group = [list[0]];
+      const flush = () => {
+        const from = group[0].from;
+        const to = group[group.length - 1].to;
+        const days = [];
+        for (let d = Math.max(1, from - 1); d <= to; d += 1) days.push(d);
+        items.push({ rule, count: 1, staff: pid, text: `${who(pid)}の${from < 1 ? '前の月' : md(from)}〜${md(to)}は、希望・固定・前の月の続きだけで${RULE_BY_ID[rule].name}になります`, refs: fixedRefs(data, pid, days) });
+      };
+      for (let i = 1; i < list.length; i += 1) {
+        const prev = group[group.length - 1];
+        let free = true;
+        for (let d = prev.to + 1; d < list[i].from; d += 1) if (fixedValue(data, pid, d) !== undefined) free = false;
+        if (free) group.push(list[i]);
+        else {
+          flush();
+          group = [list[i]];
+        }
+      }
+      flush();
+    }
+  }
+  // 遅い→早い・2連休が足りない：決まっている2日（3日）でできるもの
+  for (const it of un.filter((x) => x.rule === 'lateToEarly' || x.rule === 'twoOffLateEarly')) {
+    if (S(it.rule) === 'off') continue;
+    const days = it.rule === 'lateToEarly' ? [it.day - 1, it.day] : [it.day - 1, it.day, it.day + 1];
+    items.push({ rule: it.rule, count: 1, staff: it.staff, day: it.day, text: it.text, refs: fixedRefs(data, it.staff, days.filter((d) => d >= 1 && d <= N)) });
+  }
+  const allDays = Array.from({ length: N }, (_, i) => i + 1);
+  const open = data.staff.map((p) => allDays.map((day) => openShifts(data, p, day)));
+  // 人員不足：日ごとに「そのシフトだけで足りないシフトの数」と「その日の最大流が届かなければ 1」の大きいほう
+  if (S('shortage') !== 'off') {
+    const rowAll = staffingRows(data).find((r) => r.key === 'all');
+    const nrows = needRows(data).filter((r) => countedShift(shiftById(data, r.shiftId)));
+    for (const day of allDays) {
+      const shortShifts = new Set();
+      for (const r of nrows) {
+        const need = needOn(data, r.shiftId, r.emp, day).value;
+        if (!need) continue;
+        const can = data.staff.filter((p, i) => open[i][day - 1].some((s) => s.id === r.shiftId) && (r.emp === 'all' || p.employment === r.emp)).length;
+        if (can < need) shortShifts.add(r.shiftId);
+      }
+      const f = rowAll ? rowFlow(data, rowAll, open, null, [day]) : { flow: 0, need: 0 };
+      const count = Math.max(shortShifts.size, f.flow < f.need ? 1 : 0);
+      if (!count) continue;
+      // 直し方の候補：その日に休み・別のシフト・空きに決まっている、人数に数えるシフトを担当する人のマス
+      const refs = data.staff.filter((p) => p.shifts.some((sid) => countedShift(shiftById(data, sid)))).flatMap((p) => {
+        const v = fixedValue(data, p.id, day);
+        return v !== undefined && (v === null || restLike.has(v.kind) || (v.kind === 'shift' && !shortShifts.has(v.shift))) ? [{ pid: p.id, day }] : [];
+      });
+      const names = [...shortShifts].map((sid) => shiftById(data, sid)?.symbol).join('・');
+      items.push({ rule: 'shortage', count, day, text: `${md(day)}は、出られる人だけでは${names ? `「${names}」が` : '必要人数が'}埋まりません（埋められるのは ${f.flow}人ぶん・必要 ${f.need}人）`, refs });
+    }
+  }
+  // スキル不足：日と時間帯ごとに、そのスキルを持ち出られる人が最低人数より少ない（時間帯は検査と同じくシフトの設定で見る）
+  if (S('skillShort') !== 'off') {
+    for (const k of data.settings.skills) {
+      for (const g of GROUPS) {
+        const min = k.min?.[g] ?? 0;
+        if (!min) continue;
+        for (const day of allDays) {
+          const have = data.staff.filter((p, i) => p.skills.includes(k.id) && open[i][day - 1].some((s) => s.group === g)).length;
+          if (have >= min) continue;
+          const refs = data.staff.filter((p) => p.skills.includes(k.id)).flatMap((p) => (fixedValue(data, p.id, day) !== undefined ? [{ pid: p.id, day }] : []));
+          items.push({ rule: 'skillShort', count: 1, day, text: `${md(day)}の${data.settings.groupNames[g]}は、「${k.name}」ができて出られる人が${have}人です（最低${min}人）`, refs });
+        }
+      }
+    }
+  }
+  // 公休が足りない：公休にできる日（決まっていない日・公休に決まっている日。明けになる日は除く）が、公休の予定より少ない
+  if (S('offShort') !== 'off') {
+    for (const p of data.staff) {
+      let can = 0;
+      for (const day of allDays) {
+        const v = fixedValue(data, p.id, day);
+        if (v?.kind === 'off' || (v === undefined && !forcedAke(data, p, day))) can += 1;
+      }
+      if (can >= p.offDays) continue;
+      const refs = allDays.flatMap((day) => {
+        const v = fixedValue(data, p.id, day);
+        return v !== undefined && v?.kind !== 'off' ? [{ pid: p.id, day }] : [];
+      });
+      items.push({ rule: 'offShort', count: 1, staff: p.id, text: `${who(p.id)}は、希望・固定のとおりだと公休を${can}日しか取れません（予定${p.offDays}日）`, refs });
+    }
+  }
+  const byRule = {};
+  for (const it of items) byRule[it.rule] = (byRule[it.rule] ?? 0) + it.count;
+  const six = byRule.sixPlus ?? 0;
+  const hard = Object.entries(byRule).filter(([r]) => r !== 'sixPlus' && S(r) === 'hard').reduce((a, [, n]) => a + n, 0);
+  return { items, byRule, six, hard };
+}
+
+// 直し方のボタン（案の 4-2）：理由のマスの希望・固定を、写しで外して見込みを数え直し、最低件数が減るものだけ（1つの理由に3つまで）。
+// 返す：[{ pid, day, kind: 'request' | 'lock', label, before: { six, hard }, after: { six, hard } }]
+export function fixesFor(data, item, base = lowerBound(data)) {
+  const out = [];
+  const md = (d) => `${data.month.month}月${d}日`;
+  for (const ref of item.refs) {
+    if (out.length >= 3) break;
+    const p = data.staff.find((x) => x.id === ref.pid);
+    const locked = Boolean(data.month.marks[ref.pid]?.[ref.day]?.locked);
+    const r = data.month.requests[ref.pid]?.[ref.day];
+    if (!locked && !r) continue;
+    const fix = { pid: ref.pid, day: ref.day, kind: locked ? 'lock' : 'request' };
+    const copy = clone(data);
+    applyFix(copy, fix);
+    const after = lowerBound(copy);
+    if (after.six + after.hard >= base.six + base.hard) continue;
+    fix.label = locked
+      ? `${p?.name || '名前なし'}さんの${md(ref.day)}の固定（${cellName(data, cellOf(data, ref.pid, ref.day))}）を外す`
+      : `${p?.name || '名前なし'}さんの${md(ref.day)}の希望（${cellName(data, r)}）を外す`;
+    fix.before = { six: base.six, hard: base.hard };
+    fix.after = { six: after.six, hard: after.hard };
+    out.push(fix);
+  }
+  return out;
+}
+
+// 直し方のボタンを当てる
+export function applyFix(data, fix) {
+  if (fix.kind === 'lock') setLock(data, fix.pid, fix.day, false);
+  else setRequest(data, fix.pid, fix.day, null);
+}
+
+// ---------- 5-3 不足の理由（理由を見る） ----------
+// 足りないマス（日・シフト）について、人ごとに、なぜ入っていないか（案の 4-3）。決まっていない人は写しの表に入れて検査し、
+// いまの表より増える 6連勤以上・絶対の決まりを理由にする（本物の表は変えない）。
+// 返す：[{ pid, name, status: 'can' | 'add' | 'blocked', text }]（入れられる人から並べる）
+export function reasonsFor(data, day, shiftId) {
+  const s = shiftById(data, shiftId);
+  const severe = (res) => {
+    const m = {};
+    for (const [rule, v] of Object.entries(res.byRule)) if (v.strength === 'hard' || v.strength === 'always') m[rule] = v.count;
+    return m;
+  };
+  const baseRes = checkTable(data);
+  const before = severe(baseRes);
+  const shortOf = (res) => res.items.find((it) => it.rule === 'shortage' && it.day === day && it.shift === shiftId)?.amount ?? 0;
+  const baseShort = shortOf(baseRes);
+  // 写しで入れてみる。返す：{ more: 増える決まりの名前, fills: 足りない分が減るか }
+  const added = (p) => {
+    const copy = clone(data);
+    setCellByHand(copy, p.id, day, { kind: 'shift', shift: shiftId });
+    const res = checkTable(copy);
+    const after = severe(res);
+    const more = Object.entries(after).filter(([rule, n]) => rule !== 'notAssigned' && rule !== 'shortage' && n > (before[rule] ?? 0)).map(([rule]) => RULE_BY_ID[rule].name);
+    // 人員不足は、この枠が埋まってもほかの日・シフトで増えることがあるので、全部の足りない人数で比べる
+    const shortAll = (r) => r.items.filter((it) => it.rule === 'shortage').reduce((a2, it) => a2 + it.amount, 0);
+    if (shortAll(res) >= shortAll(baseRes) && shortOf(res) < baseShort) more.push(RULE_BY_ID.shortage.name);
+    return { more, fills: shortOf(res) < baseShort };
+  };
+  // この日このシフトで足りない区分（区分を分けて数えるシフトのとき）
+  const shortEmps = needRows(data).filter((r) => r.shiftId === shiftId && r.emp !== 'all').filter((r) => {
+    const got = data.staff.filter((q) => q.employment === r.emp && cellOf(data, q.id, day)?.kind === 'shift' && cellOf(data, q.id, day).shift === shiftId).length;
+    return got < needOn(data, shiftId, r.emp, day).value;
+  }).map((r) => r.emp);
+  const out = [];
+  for (const p of data.staff) {
+    const name = `${p.name || '名前なし'}さん`;
+    const cur = cellOf(data, p.id, day);
+    if (cur?.kind === 'shift' && cur.shift === shiftId) continue;
+    const f = fixedValue(data, p.id, day);
+    const locked = Boolean(data.month.marks[p.id]?.[day]?.locked);
+    let text = null;
+    if (f === null) text = '空きのまま固定しています';
+    else if (f) text = locked ? `${cellName(data, f)}に固定しています` : `${cellName(data, f)}の希望があります`;
+    else if (forcedAke(data, p, day) || (cur?.kind === 'ake' && day > 1 && cellOf(data, p.id, day - 1)?.kind === 'shift' && shiftById(data, cellOf(data, p.id, day - 1).shift)?.night)) text = '前の日が夜勤なので、明けです';
+    else {
+      const need = data.month.dailySkill[shiftId]?.[day];
+      if (need?.length && !need.some((k) => p.skills.includes(k))) text = `この日の「${s?.symbol}」に要るスキルを持っていません`;
+    }
+    if (text) {
+      out.push({ pid: p.id, name, status: 'blocked', text });
+      continue;
+    }
+    const { more, fills } = added(p);
+    const now = cur ? `いまは${cellName(data, cur)}` : 'いまは空き';
+    if (!fills) {
+      const empText = shortEmps.length && !shortEmps.includes(p.employment)
+        ? `足りないのは${shortEmps.map((e) => data.settings.employmentNames[e]).join('・')}の枠なので、入れても埋まりません`
+        : '入れても、この日の足りない分は埋まりません';
+      out.push({ pid: p.id, name, status: 'blocked', text: `${empText}（${now}）` });
+      continue;
+    }
+    if (!p.shifts.includes(shiftId)) {
+      out.push({ pid: p.id, name, status: more.length ? 'blocked' : 'add', text: more.length ? `担当していません（担当を足しても、入れると${more.join('・')}が増えます）` : `担当していません。担当を足せば入れられます（${now}）` });
+    } else {
+      out.push({ pid: p.id, name, status: more.length ? 'blocked' : 'can', text: more.length ? `入れると、${more.join('・')}が増えます（${now}）` : `入れられます（${now}）` });
+    }
+  }
+  const order = { can: 0, add: 1, blocked: 2 };
+  return out.sort((a, b) => order[a.status] - order[b.status]);
 }

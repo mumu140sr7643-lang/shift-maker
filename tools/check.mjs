@@ -20,8 +20,8 @@ import { prepareRepair, prepareRestart, solveRepair, tableChanges } from '../app
 import { checkProposal } from './repair.mjs';
 import { summarize } from '../app/js/summary.js';
 import { csvCell, toCsv, shiftTableRows } from '../app/js/csv.js';
-import { dayMargins, tightRanges, newTightness, staffingTable, monthTotals } from '../app/js/outlook.js';
-import { checkFlow } from './outlook-brute.mjs';
+import { dayMargins, tightRanges, newTightness, staffingTable, monthTotals, lowerBound, fixesFor, applyFix, reasonsFor } from '../app/js/outlook.js';
+import { checkFlow, checkMinimum } from './outlook-brute.mjs';
 
 const results = [];
 const check = (name, problems) => results.push({ name, problems });
@@ -775,6 +775,55 @@ const check = (name, problems) => results.push({ name, problems });
   const ms = performance.now() - t0;
   if (ms > 3000) problems.push(`50人 × 31日の人手の表に ${Math.round(ms)}ms かかる`);
   check(`人手の余り・不足の表（最大流 ＝ 総当たり・50人×31日で ${Math.round(ms)}ms）`, problems);
+}
+
+// 20. 最低◯件の見込み・直し方のボタン・不足の理由・帯の下の数（5-3）
+{
+  const problems = [];
+  // 見本：わざと足りなくした所が、見込みにぴったり出る
+  const want = { restaurant: { shortage: 2 }, retail: { shortage: 1 }, care: { skillShort: 1 } };
+  for (const [kind, w] of Object.entries(want)) {
+    const d = S.buildSample(kind, 2026, 11);
+    const lb = lowerBound(d);
+    if (JSON.stringify(lb.byRule) !== JSON.stringify(w) || lb.six) problems.push(`見本 ${kind} の見込みが ${JSON.stringify(lb.byRule)}（${JSON.stringify(w)} のはず）`);
+    // 直し方のボタン：出したものは、どれも写しに当てると言ったとおりに減る
+    for (const it of lb.items) {
+      for (const f of fixesFor(d, it, lb)) {
+        const copy = M.clone(d);
+        applyFix(copy, f);
+        const after = lowerBound(copy);
+        if (after.six !== f.after.six || after.hard !== f.after.hard || after.six + after.hard >= lb.six + lb.hard) problems.push(`見本 ${kind} の「${f.label}」が言ったとおりに減らない`);
+      }
+    }
+  }
+  // とても小さな月の総当たり：見込み ≦ いちばん少ない件数（全部は tools/outlook-brute.mjs）
+  for (let seed = 1; seed <= 6; seed += 1) problems.push(...checkMinimum(seed).problems);
+  // 理由を見る：本物の表は変えない。社員の枠にパートは「埋まりません」
+  {
+    const d = S.buildSample('restaurant', 2026, 11);
+    const res = await solveStaged(d, { loadHighs: () => highsLoader(), nodeLimit: 5, seed: 1, maxStages: 5 });
+    d.month.table = res.table;
+    const text = M.canonicalJSON(d);
+    const asa = d.settings.shifts.find((x) => x.onePerDay && x.group === 'early');
+    const list = reasonsFor(d, 10, asa.id);
+    if (M.canonicalJSON(d) !== text) problems.push('理由を見ると、本物の表が変わった');
+    const part = list.find((x) => d.staff.find((p) => p.id === x.pid)?.employment === 'part');
+    if (!part || part.status !== 'blocked' || !part.text.includes('枠なので')) problems.push('社員の枠が足りない日に、パートの人の理由が「入れても埋まりません」にならない');
+    if (!list.some((x) => x.text.includes('公休の希望'))) problems.push('休みの希望の人の理由が出ない');
+  }
+  // 帯の下の数（B）：公休を削った日が人の多い日なら、予定どおり休ませても足りなくならない（足し算なら増えてしまう）
+  {
+    const d = M.emptyData(2026, 11, 'blank');
+    const E = M.newShift(d, { symbol: '早', name: '早', group: 'early', combine: true, need: { full: 0, part: 0, all: 1 } });
+    d.settings.shifts = [E];
+    d.staff = ['A', 'B', 'C'].map((name) => M.newStaff(d, { name, shifts: [E.id], offDays: 9 }));
+    for (let day = 1; day <= 30; day += 1) for (const p of d.staff) (d.month.table[p.id] ??= {})[day] = { kind: 'shift', shift: E.id };
+    const res = C.checkTable(d);
+    const additive = res.totals.shortSlots + res.items.filter((it) => it.rule === 'offShort').reduce((a, it) => a + it.amount, 0);
+    const least = staffingTable(d).find((r) => r.key === 'all').short;
+    if (!(additive > 0 && least === 0)) problems.push(`公休を削った日が人の多い日の例で、最大流の「少なくとも」が ${least}（0 のはず。足し算なら ${additive}）`);
+  }
+  check('最低◯件の見込み（見本・総当たり）・直し方のボタン・不足の理由・帯の下の数', problems);
 }
 
 // 10. 言葉の確かめ：一覧の言葉が、リポジトリのファイル・コミットの文に入っていないか
