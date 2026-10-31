@@ -1018,5 +1018,17 @@
  {
   "id": "zero-days-none",
   "find": "zero-days-none"
+ },
+ {
+  "id": "staffing-table",
+  "find": "staffing-table"
+ },
+ {
+  "id": "month-total",
+  "find": "month-total"
+ },
+ {
+  "id": "staffing-cut",
+  "find": "staffing-cut"
  }
 ]

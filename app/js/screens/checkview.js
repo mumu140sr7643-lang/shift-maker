@@ -1,7 +1,7 @@
 // 検査の結果を画面に出す部品：マスの印の索引・件数の帯・エラーの一覧。
-import { h } from '../dom.js?v=5.1';
-import { RULE_BY_ID } from '../rules.js?v=5.1';
-import { monthDays } from '../model.js?v=5.1';
+import { h } from '../dom.js?v=5.2';
+import { RULE_BY_ID } from '../rules.js?v=5.2';
+import { monthDays } from '../model.js?v=5.2';
 
 const LEVEL_NAMES = { six: '6連勤以上', hard: '絶対', soft: 'できれば' };
 

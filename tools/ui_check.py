@@ -1687,6 +1687,8 @@ def scenario_margin(browser, base):
         rows = page.locator('[data-testid="margin-table"] tbody tr')
         ok(rows.count() >= 2 and rows.first.locator("th").inner_text() == "全体", f"{scheme} {width}px 手順5 の詳しい機能に、日ごとの余裕（全体・時間帯・スキル）が出る", str(rows.count()))
         ok(t(page, "zero-days").count() == 1 and "全員出勤" in t(page, "zero-days").inner_text(), f"{scheme} {width}px 0人の日は、出勤になる人の名前と一緒に出す")
+        ok(t(page, "staffing-table").count() == 1 and page.locator('[data-testid="staffing-table"] tr[data-key="all"] td').nth(0).inner_text().startswith("不足"), f"{scheme} {width}px 人手の余り・不足の表が出て、足りない行は「不足」", page.locator('[data-testid="staffing-table"] tr[data-key="all"]').inner_text()[:60] if t(page, "staffing-table").count() else "")
+        ok(t(page, "month-total").count() == 1 and "合計" in t(page, "month-total").inner_text(), f"{scheme} {width}px 月の合計の人手が出る")
         look(page, f"{scheme} {width}px 手順5 日ごとの余裕", f"step5-outlook-{scheme}-{width}")
         ok(not errors, f"エラー0 あと何人休めるか {scheme} {width}px", " / ".join(errors[:3]))
         ctx.close()

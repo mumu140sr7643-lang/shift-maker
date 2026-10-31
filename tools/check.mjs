@@ -20,7 +20,8 @@ import { prepareRepair, prepareRestart, solveRepair, tableChanges } from '../app
 import { checkProposal } from './repair.mjs';
 import { summarize } from '../app/js/summary.js';
 import { csvCell, toCsv, shiftTableRows } from '../app/js/csv.js';
-import { dayMargins, tightRanges, newTightness } from '../app/js/outlook.js';
+import { dayMargins, tightRanges, newTightness, staffingTable, monthTotals } from '../app/js/outlook.js';
+import { checkFlow } from './outlook-brute.mjs';
 
 const results = [];
 const check = (name, problems) => results.push({ name, problems });
@@ -753,6 +754,27 @@ const check = (name, problems) => results.push({ name, problems });
   const ms = (performance.now() - t0) / 5;
   if (ms > 300) problems.push(`50人 × 31日のあと何人休めるかに ${Math.round(ms)}ms かかる`);
   check(`日ごとの余裕・きつい期間（50人×31日で 1回 ${Math.round(ms * 10) / 10}ms）`, problems);
+}
+
+// 19. 人手の余り・不足の表（最大流）と月の合計の人手（5-2）
+{
+  const problems = [];
+  // とても小さな月 40 個で、最大流 ＝ 全部の割り当てを調べた最大（全部は tools/outlook-brute.mjs）
+  for (let seed = 1; seed <= 40; seed += 1) problems.push(...checkFlow(seed));
+  // 見本：わざと足りなくした日が「足りない日」に出る
+  const r = staffingTable(S.buildSample('restaurant', 2026, 11)).find((x) => x.key === 'all');
+  if (r.short !== 2 || JSON.stringify(r.shortDays) !== '[10]') problems.push(`飲食店の見本の全体の行が 不足 ${r.short}・足りない日 ${r.shortDays}（不足 2・10日 のはず）`);
+  const c = staffingTable(S.buildSample('care', 2026, 11)).find((x) => x.key.startsWith('skill:') && x.key.endsWith(':night'));
+  if (!c || c.short !== 1 || JSON.stringify(c.shortDays) !== '[20]') problems.push('介護施設の見本の、看護（夜）の行が 不足 1・20日 にならない');
+  const t = monthTotals(S.buildSample('care', 2026, 11));
+  if (t.total.need !== t.full.need + t.part.need + t.combined.need || t.combined.need === 0) problems.push('月の合計の人手で、区分を合わせるシフトを数えない');
+  // 速さ：50人 × 31日
+  const big = await makeSample({ seed: 41, staff: 50, year: 2026, month: 12 });
+  const t0 = performance.now();
+  staffingTable(big);
+  const ms = performance.now() - t0;
+  if (ms > 3000) problems.push(`50人 × 31日の人手の表に ${Math.round(ms)}ms かかる`);
+  check(`人手の余り・不足の表（最大流 ＝ 総当たり・50人×31日で ${Math.round(ms)}ms）`, problems);
 }
 
 // 10. 言葉の確かめ：一覧の言葉が、リポジトリのファイル・コミットの文に入っていないか

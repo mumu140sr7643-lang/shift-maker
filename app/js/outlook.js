@@ -1,6 +1,6 @@
 // 見込みと説明（v5。docs/見込みと説明の案.md）の数え方。画面には触らない。node からも使う。
 // 5-1：その日に出られる人・あと何人休めるか（日ごとの余裕）・きつい期間・新しくできた 0 人の日ときつい期間。
-import { monthDays, cellOf, shiftById, needRows, needOn } from './model.js?v=5.1';
+import { monthDays, cellOf, shiftById, needRows, needOn } from './model.js?v=5.2';
 
 export const GROUPS = ['early', 'late', 'night'];
 
@@ -102,4 +102,214 @@ export function newTightness(before, after) {
   const rb = tightRanges(before);
   const ranges = tightRanges(after).filter((r) => !rb.some((b) => b.from <= r.from && r.to <= b.to));
   return { zeroDays, ranges };
+}
+
+// ---------- 5-2 人手の余り・不足の表（最大流） ----------
+
+// 月に働ける日数の上限 W_p（案の 1 章）：その月の日数 − 人数に数えるシフトに入れない決まった日（休み・半休・明け・空き・研修 など）
+//   − 明けになる日 − まだ決まっていない公休の予定 − まだ決まっていない有給の予定（切り上げ）
+export function workCap(data, p) {
+  const N = monthDays(data);
+  let blocked = 0;
+  let fixedOff = 0;
+  let fixedPaid = 0;
+  for (let day = 1; day <= N; day += 1) {
+    const f = fixedValue(data, p.id, day);
+    if (f?.kind === 'off') fixedOff += 1;
+    if (f?.kind === 'paid') fixedPaid += 1;
+    if (!openShifts(data, p, day).length && (f !== undefined || p.shifts.some((sid) => countedShift(shiftById(data, sid))))) blocked += 1;
+  }
+  const extraOff = Math.max(0, p.offDays - fixedOff);
+  const extraPaid = Math.max(0, Math.ceil(p.paidDays) - fixedPaid);
+  return Math.max(0, N - blocked - extraOff - extraPaid);
+}
+
+// 最大流（Dinic 法）
+class Flow {
+  constructor(n) {
+    this.n = n;
+    this.head = new Array(n).fill(-1);
+    this.next = [];
+    this.to = [];
+    this.cap = [];
+  }
+
+  add(u, v, c) {
+    for (const [a, b, cc] of [[u, v, c], [v, u, 0]]) {
+      this.to.push(b);
+      this.cap.push(cc);
+      this.next.push(this.head[a]);
+      this.head[a] = this.to.length - 1;
+    }
+  }
+
+  max(s, t) {
+    let flow = 0;
+    const level = new Array(this.n);
+    const it = new Array(this.n);
+    const bfs = () => {
+      level.fill(-1);
+      level[s] = 0;
+      const q = [s];
+      for (let i = 0; i < q.length; i += 1) {
+        for (let e = this.head[q[i]]; e !== -1; e = this.next[e]) {
+          if (this.cap[e] > 0 && level[this.to[e]] < 0) {
+            level[this.to[e]] = level[q[i]] + 1;
+            q.push(this.to[e]);
+          }
+        }
+      }
+      return level[t] >= 0;
+    };
+    const dfs = (u, f) => {
+      if (u === t) return f;
+      for (; it[u] !== -1; it[u] = this.next[it[u]]) {
+        const e = it[u];
+        const v = this.to[e];
+        if (this.cap[e] > 0 && level[v] === level[u] + 1) {
+          const got = dfs(v, Math.min(f, this.cap[e]));
+          if (got > 0) {
+            this.cap[e] -= got;
+            this.cap[e ^ 1] += got;
+            return got;
+          }
+        }
+      }
+      return 0;
+    };
+    while (bfs()) {
+      for (let i = 0; i < this.n; i += 1) it[i] = this.head[i];
+      for (let f = dfs(s, Infinity); f > 0; f = dfs(s, Infinity)) flow += f;
+    }
+    return flow;
+  }
+}
+
+// 人手の表の行：{ key, label, slots: [{ accepts(p, open) → 入れるか, need(day) → 人数 }] }
+export function staffingRows(data) {
+  const names = data.settings.groupNames;
+  const rows = needRows(data).filter((r) => countedShift(shiftById(data, r.shiftId)));
+  const slot = (r) => ({
+    accepts: (p, open) => open.some((s) => s.id === r.shiftId) && (r.emp === 'all' || p.employment === r.emp),
+    need: (day) => needOn(data, r.shiftId, r.emp, day).value,
+  });
+  const out = [{ key: 'all', label: '全体', slots: rows.map(slot) }];
+  for (const g of GROUPS) {
+    const rs = rows.filter((r) => groupOf(shiftById(data, r.shiftId)) === g);
+    if (rs.length) out.push({ key: `group:${g}`, label: names[g], slots: rs.map(slot) });
+  }
+  for (const s of data.settings.shifts.filter((x) => countedShift(x) && x.onePerDay)) {
+    out.push({ key: `one:${s.id}`, label: `${s.name || s.symbol}（1日1人の役）`, slots: rows.filter((r) => r.shiftId === s.id).map(slot) });
+  }
+  for (const k of data.settings.skills) {
+    for (const g of GROUPS) {
+      const min = k.min?.[g] ?? 0;
+      if (!min) continue;
+      out.push({
+        key: `skill:${k.id}:${g}`,
+        label: `${k.name}（${names[g]}）`,
+        slots: [{ accepts: (p, open) => p.skills.includes(k.id) && open.some((s) => groupOf(s) === g), need: () => min }],
+      });
+    }
+  }
+  return out;
+}
+
+// 1つの行の最大流。caps：人ごとの上限（null なら上限なし）。days：数える日（null なら全部）
+function rowFlow(data, row, open, caps, days) {
+  const P = data.staff.length;
+  const J = row.slots.length;
+  const D = days.length;
+  const S = 0;
+  const T = 1;
+  const pd = (i, k) => 2 + P + i * D + k;
+  const sl = (k, j) => 2 + P + P * D + k * J + j;
+  const f = new Flow(2 + P + P * D + D * J);
+  let need = 0;
+  days.forEach((day, k) => {
+    row.slots.forEach((s, j) => {
+      const n = s.need(day);
+      need += n;
+      if (n > 0) f.add(sl(k, j), T, n);
+    });
+  });
+  data.staff.forEach((p, i) => {
+    f.add(S, 2 + i, caps ? caps[i] : D);
+    days.forEach((day, k) => {
+      const o = open[i][day - 1];
+      if (!o.length) return;
+      let any = false;
+      row.slots.forEach((s, j) => {
+        if (s.accepts(p, o)) {
+          f.add(pd(i, k), sl(k, j), 1);
+          any = true;
+        }
+      });
+      if (any) f.add(2 + i, pd(i, k), 1);
+    });
+  });
+  return { flow: f.max(S, T), need };
+}
+
+// 確かめの道具のため：その行の、月全体の最大流（capped なら W_p の上限あり）
+export function rowFillable(data, rowKey, { capped = true } = {}) {
+  const N = monthDays(data);
+  const allDays = Array.from({ length: N }, (_, i) => i + 1);
+  const open = data.staff.map((p) => allDays.map((day) => openShifts(data, p, day)));
+  const row = staffingRows(data).find((r) => r.key === rowKey);
+  return row ? rowFlow(data, row, open, capped ? data.staff.map((p) => workCap(data, p)) : null, allDays).flow : null;
+}
+
+// 人手の余り・不足の表。返す：[{ key, label, need, available, fillable, short, spare, shortDays: [日], cutDays }]
+//   fillable：W_p の上限を付けた最大流（埋められる）。shortDays：その日だけで流しても必要に届かない日。
+//   cutDays：上限なしで流した数 − 上限ありで流した数（予定どおり休むと埋められない分）
+export function staffingTable(data) {
+  const N = monthDays(data);
+  const allDays = Array.from({ length: N }, (_, i) => i + 1);
+  const open = data.staff.map((p) => allDays.map((day) => openShifts(data, p, day)));
+  const caps = data.staff.map((p) => workCap(data, p));
+  return staffingRows(data).map((row) => {
+    const capped = rowFlow(data, row, open, caps, allDays);
+    let uncapped = 0;
+    const shortDays = [];
+    for (const day of allDays) {
+      const r = rowFlow(data, row, open, null, [day]);
+      uncapped += r.flow;
+      if (r.flow < r.need) shortDays.push(day);
+    }
+    const available = data.staff.reduce((a, p, i) => {
+      const can = allDays.filter((day) => row.slots.some((s) => s.accepts(p, open[i][day - 1]))).length;
+      return a + Math.min(caps[i], can);
+    }, 0);
+    const short = Math.max(0, capped.need - capped.flow);
+    return {
+      key: row.key,
+      label: row.label,
+      need: capped.need,
+      available,
+      fillable: capped.flow,
+      short,
+      spare: short ? 0 : available - capped.need,
+      shortDays,
+      cutDays: Math.max(0, uncapped - capped.flow),
+    };
+  });
+}
+
+// 月の合計の人手（区分ごと）。返す：{ full, part, combined, total }。それぞれ { need（必要な人日）, available（出られる人日 ＝ W_p の合計。区分を合わせるシフトは null） }
+export function monthTotals(data) {
+  const N = monthDays(data);
+  const need = { full: 0, part: 0, all: 0 };
+  for (const r of needRows(data)) {
+    if (!countedShift(shiftById(data, r.shiftId))) continue;
+    for (let day = 1; day <= N; day += 1) need[r.emp] += needOn(data, r.shiftId, r.emp, day).value;
+  }
+  const avail = { full: 0, part: 0 };
+  for (const p of data.staff) if (p.shifts.some((sid) => countedShift(shiftById(data, sid)))) avail[p.employment] += workCap(data, p);
+  return {
+    full: { need: need.full, available: avail.full },
+    part: { need: need.part, available: avail.part },
+    combined: { need: need.all, available: null },
+    total: { need: need.full + need.part + need.all, available: avail.full + avail.part },
+  };
 }

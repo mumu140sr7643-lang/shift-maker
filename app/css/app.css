@@ -669,6 +669,12 @@ button.band-item { cursor: pointer; }
 .margin-table th[scope="row"] { text-align: left; white-space: nowrap; background: var(--surface); }
 details.outlook h3 { margin-top: 12px; }
 .zero-days { margin: 8px 0 0; padding-left: 1.2em; }
+.staffing-table { border-collapse: collapse; font-size: 0.9rem; margin-top: 4px; }
+.staffing-table th, .staffing-table td { border: 1px solid var(--border); padding: 4px 8px; text-align: right; }
+.staffing-table thead th { background: var(--surface-2); text-align: center; }
+.staffing-table th[scope="row"] { text-align: left; white-space: nowrap; background: var(--surface); }
+.staffing-table td:nth-child(6) { text-align: left; min-width: 8em; }
+.staffing-table td.is-short { color: var(--error-text); background: var(--error-bg); font-weight: 700; }
 .margin-summary ul { margin: 4px 0 0; padding-left: 1.2em; }
 
 /* 手順6 元に戻す・入れ替え */

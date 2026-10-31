@@ -1,6 +1,6 @@
 // いまのデータと画面の状態。変えるときは commit() を通す（自動で保存する）。
-import { saveData } from './storage.js?v=5.1';
-import { clearNotices } from './dialog.js?v=5.1';
+import { saveData } from './storage.js?v=5.2';
+import { clearNotices } from './dialog.js?v=5.2';
 
 export const app = {
   data: null,

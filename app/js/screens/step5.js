@@ -1,18 +1,18 @@
 // 手順5 自動で作る：1分で作る（おためし）。計算は裏方（solver/worker.js の Web Worker）で行うので、画面は固まらない。
 // 計算は写しで行い、終わってから、そのあいだにデータが変わっていないことを確かめて本物の表に入れる。
-import { h, append } from '../dom.js?v=5.1';
-import { app, rerender, goStep } from '../state.js?v=5.1';
-import { record, undo, nextUndo } from '../history.js?v=5.1';
-import { canonicalJSON, clone, applyGenerated } from '../model.js?v=5.1';
-import { checkTable, solveConflicts, unavoidableErrors } from '../check.js?v=5.1';
-import { RULE_BY_ID } from '../rules.js?v=5.1';
-import { ask, notify } from '../dialog.js?v=5.1';
-import { takeBackup, backupLines } from '../backup.js?v=5.1';
-import { timeLabel } from '../calendar.js?v=5.1';
-import { screenTitle } from './common.js?v=5.1';
-import { countBand } from './checkview.js?v=5.1';
-import { startSolving, isSolving, quickSeconds } from './solving.js?v=5.1';
-import { outlookCard } from './outlookview.js?v=5.1';
+import { h, append } from '../dom.js?v=5.2';
+import { app, rerender, goStep } from '../state.js?v=5.2';
+import { record, undo, nextUndo } from '../history.js?v=5.2';
+import { canonicalJSON, clone, applyGenerated } from '../model.js?v=5.2';
+import { checkTable, solveConflicts, unavoidableErrors } from '../check.js?v=5.2';
+import { RULE_BY_ID } from '../rules.js?v=5.2';
+import { ask, notify } from '../dialog.js?v=5.2';
+import { takeBackup, backupLines } from '../backup.js?v=5.2';
+import { timeLabel } from '../calendar.js?v=5.2';
+import { screenTitle } from './common.js?v=5.2';
+import { countBand } from './checkview.js?v=5.2';
+import { startSolving, isSolving, quickSeconds } from './solving.js?v=5.2';
+import { outlookCard } from './outlookview.js?v=5.2';
 
 // 元に戻すの履歴での呼び名（手順6 の「元に戻す」にも出る）
 const GENERATED_LABEL = '自動で作った表';
