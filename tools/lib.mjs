@@ -46,3 +46,9 @@ export function gitCommit() {
   const status = run('git status --porcelain');
   return { commit: run('git rev-parse --short HEAD'), dirty: status === null ? null : status.length > 0 };
 }
+
+// 段の記録のうち、HiGHS が止まった回（答えの状態の番号 −1）の数。区切って解いた段（roundCodes）は回ごとに数える。
+// あ の解き直しの段は記録に残らないので、HiGHS の止まった数（onAbort で数える）と合わせて見る
+export function errorCount(stages) {
+  return (stages ?? []).reduce((s, st) => s + (st.roundCodes ? st.roundCodes.filter((c) => c === -1).length : st.code === -1 ? 1 : 0), 0);
+}

@@ -154,7 +154,7 @@ function undoGenerated() {
   notify(res.skipped ? `作る前の表に戻しました。作ったあとで変えた所 ${res.skipped}か所は、いまのままにしました。` : '作る前の表に戻しました。', { kind: 'ok', testid: 'run-undone' });
 }
 
-function modeCard() {
+function modeCard(d) {
   const option = (value, label, help, disabled, testid) =>
     h(
       'label',
@@ -183,7 +183,7 @@ function modeCard() {
       'div',
       { class: 'modes', role: 'radiogroup', 'aria-label': '作り方' },
       option('quick', '1分で作る（おためし）', '1分ほどで作ります。まず形を見たいときに。', false, 'mode-quick'),
-      option('careful', 'じっくり作る（本番。最大10分ほど）', '最大10分ほどかかります。いちばん良い答えを、何通りかで探します。', false, 'mode-careful'),
+      option('careful', 'じっくり作る（本番。最大10分ほど）', carefulWorkers(d) > 1 ? '最大10分ほどかかります。いちばん良い答えを、何通りかで探します。' : '最大10分ほどかかります。1分で作った答えを、時間いっぱいまで直していき、いちばん良い答えを選びます。', false, 'mode-careful'),
     ),
   );
 }
@@ -233,7 +233,14 @@ function makeCard(d, canMake) {
     h('button', { type: 'button', class: 'btn btn-primary btn-big', text: 'シフトを作る', testid: 'generate', disabled: !canMake, on: { click: start } }),
     canMake ? null : h('p', { class: 'help why', testid: 'generate-why', text: '上の「2. 作る前の確かめ」を直すと押せます。' }),
     mode === 'careful'
-      ? h('p', { class: 'help', testid: 'make-help', text: `最大${Math.ceil(carefulSeconds() / 60)}分ほどかかります（このパソコンでは${carefulWorkers() > 1 ? `${carefulWorkers()}通り同時に` : '1通りずつ'}探します）。はじめの1分で「1分で作る」と同じ答えを作り、それより良い答えだけを選びます。計算のあいだは、ほかの重いアプリを閉じてください。` })
+      ? h('p', {
+          class: 'help',
+          testid: 'make-help',
+          dataset: { workers: String(carefulWorkers(d)) },
+          text: carefulWorkers(d) > 1
+            ? `最大${Math.ceil(carefulSeconds() / 60)}分ほどかかります（このパソコンでは${carefulWorkers(d)}通り同時に探します）。はじめの1分で「1分で作る」と同じ答えを作り、それより良い答えだけを選びます。計算のあいだは、ほかの重いアプリを閉じてください。`
+            : `最大${Math.ceil(carefulSeconds() / 60)}分ほどかかります。はじめの1分で「1分で作る」と同じ答えを作り、そのあと時間いっぱいまで直していき、それより良い答えだけを選びます。計算のあいだは、ほかの重いアプリを閉じてください。`,
+        })
       : h('p', { class: 'help', testid: 'make-help', text: `${quickSeconds()}秒ほどかかります。計算のあいだは、ほかの重いアプリを閉じてください（時間で区切って作るので、パソコンが混んでいると、答えが悪くなることがあります）。` }),
     hasCells(d) ? h('p', { class: 'help', text: 'いまのシフト表は、作った表に置きかわります。置きかえる前に控えを残すので、「保存と控え」から戻せます。' }) : null,
   );
@@ -286,13 +293,14 @@ function resultCard(d) {
   const edited = Object.values(d.month.marks).some((row) => Object.values(row).some((m) => m.edited));
   const secs = Math.round(Number(r.seconds) || 0);
   const careful = r.mode === 'careful';
-  const how = careful ? `「じっくり作る」で作りました（${secs}秒・${Number(r.count) || 1}通り）。${r.how === 'early' ? `途中で終えました（${secs}秒）。` : ''}` : `${r.mode === 'restart' ? `「途中から作り直す」（${Number(r.fromDay) || ''}日から）` : '「1分で作る」'}で作りました（${secs}秒）。`;
+  const count = Number(r.count) || 1;
+  const how = careful ? `「じっくり作る」で作りました（${secs}秒${count > 1 ? `・${count}通り` : ''}）。${r.how === 'early' ? `途中で終えました（${secs}秒）。` : ''}` : `${r.mode === 'restart' ? `「途中から作り直す」（${Number(r.fromDay) || ''}日から）` : '「1分で作る」'}で作りました（${secs}秒）。`;
   return h(
     'section',
     { class: 'card', testid: 'run-result', dataset: { finished: String(Boolean(r.finished)), mode: careful ? 'careful' : 'quick' } },
     h('h2', { text: '作った結果' }),
     h('p', { testid: 'run-when', text: `${when}${how}` }),
-    h('p', { testid: 'run-status', text: careful && !r.finished ? '時間内に見つけたいちばん良い答えです（何通りかで探して、決めた順番でいちばん良いものを選びました）。' : status }),
+    h('p', { testid: 'run-status', text: careful && !r.finished ? (count > 1 ? '時間内に見つけたいちばん良い答えです（何通りかで探して、決めた順番でいちばん良いものを選びました）。' : '時間内に見つけたいちばん良い答えです（1分の答えを直していき、決めた順番でいちばん良いものを選びました）。') : status }),
     careful ? carefulLines(r) : null,
     h('h3', { text: 'いまのシフト表の件数' }),
     countBand(res),
@@ -317,5 +325,5 @@ export function renderStep5(el) {
   const problems = basicProblems(d);
   const blockers = problems.length ? [] : solveConflicts(d);
   const unavoidable = problems.length ? [] : unavoidableErrors(d);
-  append(el, modeCard(), precheckCard(d, problems, blockers, unavoidable), makeCard(d, !problems.length && !blockers.length), resultCard(d), outlookCard(d));
+  append(el, modeCard(d), precheckCard(d, problems, blockers, unavoidable), makeCard(d, !problems.length && !blockers.length), resultCard(d), outlookCard(d));
 }

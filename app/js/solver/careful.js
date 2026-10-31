@@ -13,6 +13,9 @@ const WATCH_EXTRA = 20;
 const REPAIR_BUDGETS = [10, 25, 50];
 const REPAIR_SECONDS = 20;
 const REPAIR_SEED = 10;
+// い・う・い2 の「できれば」の段を区切って解く1回の秒（stages.js の solveInRounds。1回の HiGHS のメモリを上限より小さく保つ。
+// 2026-10-31 確かめ役と決めた：120秒までなら 15人×30日で 749MB、25人・50人×31日で 452MB だった）
+const SOFT_ROUND_SECONDS = 120;
 
 // 候補（Worker が少ない機械では、上から順に使う）。seedAdd は1分の答えの種に足す数
 export const CANDIDATES = [
@@ -32,9 +35,24 @@ export function timePlan(seconds) {
   return { search: seconds - gap - finish, finish, total: seconds };
 }
 
+// 1本が使うメモリの見込み（MB）。cells は月の大きさ（人数 × 日数）。
+// 測り G（6-2。「できれば」の段を区切って解く形で、600秒・3か月 × 4候補。node の分を引いたメモリと WebAssembly のメモリの大きいほう）の
+// いちばん多い値が MEMORY_MAX_MB、50人×31日の月のいちばん多い値が MEMORY_50_MB。
+// メモリは月の大きさより解く長さで増えるので、どの月も MEMORY_MAX_MB を見込み、50人×31日より大きい月だけ、式が大きくなる分を見込む。余裕に 1.25 倍。
+// 2026-10-31（確かめ役と決めた）：1430MB は 15人×30日の候補 い の WebAssembly のメモリ、1125MB は 50人×31日の候補 い2 の node の分を引いたメモリ。
+// m は 1788MB になり、8GB 以下の機械は1本（候補 あ だけ）・16GB は2本・32GB 以上は4本。い・う・い2 のメモリを減らすかは 6-3 で決める
+const MEMORY_MAX_MB = 1430;
+const MEMORY_50_MB = 1125;
+const CELLS_50 = 50 * 31;
+const MEMORY_MARGIN = 1.25;
+export function workerMemoryMB(cells = 0) {
+  return MEMORY_MARGIN * Math.max(MEMORY_MAX_MB, cells > CELLS_50 ? (MEMORY_50_MB * cells) / CELLS_50 : 0);
+}
+
 // Worker の数（4 章）：CPU の数 − 1（最大4本・少なくとも1本。分からなければ1本）。
-// deviceMemory が分かるときは 2GB 以下で1本・4GB 以下で2本まで。タッチだけの機械は2本まで
-export function workerCount({ cpus, memory, touchOnly }) {
+// deviceMemory が分かるときは 2GB 以下で1本・4GB 以下で2本まで。タッチだけの機械は2本まで。
+// さらに、使ってよいメモリ（deviceMemory の 4分の1。分からないときは、タッチだけの機械 1GB・それ以外 2GB）を、1本の見込みで割った数まで
+export function workerCount({ cpus, memory, touchOnly, cells = 0 }) {
   let n = Number.isFinite(cpus) && cpus > 0 ? Math.floor(cpus) - 1 : 1;
   n = Math.max(1, Math.min(CANDIDATES.length, n));
   if (Number.isFinite(memory)) {
@@ -42,7 +60,8 @@ export function workerCount({ cpus, memory, touchOnly }) {
     else if (memory <= 4) n = Math.min(n, 2);
   }
   if (touchOnly) n = Math.min(n, 2);
-  return n;
+  const budgetMB = (Number.isFinite(memory) ? memory / 4 : touchOnly ? 1 : 2) * 1024;
+  return Math.max(1, Math.min(n, Math.floor(budgetMB / workerMemoryMB(cells))));
 }
 
 // ---------- Worker の側 ----------
@@ -103,15 +122,16 @@ export async function runCandidate(data, { role, seed, seconds = CAREFUL_SECONDS
     return;
   }
 
-  // い・う・い2：段の順番は1分と同じで、長い時間で解く。段が終わるたびの表を答えとして出す
+  // い・う・い2：段の順番は1分と同じで、長い時間で解く。段が終わるたび・「できれば」の段の回ごとの表を答えとして出す
   const r = await solveStaged(data, {
     loadHighs,
     timeLimit: plan.search,
     seed,
     exact: Boolean(cand?.exact),
     tighten: true,
+    softRound: SOFT_ROUND_SECONDS,
     onProgress: (p) => {
-      if (p.phase === 'done' && p.table) offer(p.table, 'stage', { stage: p.stage });
+      if ((p.phase === 'done' || p.phase === 'round') && p.table) offer(p.table, 'stage', { stage: p.stage });
     },
   });
   if (r.ok) offer(r.table, 'stage', { stages: r.stages });

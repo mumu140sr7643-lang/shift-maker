@@ -23,7 +23,7 @@ import { csvCell, toCsv, shiftTableRows } from '../app/js/csv.js';
 import { dayMargins, tightRanges, newTightness, staffingTable, monthTotals, lowerBound, fixesFor, applyFix, reasonsFor } from '../app/js/outlook.js';
 import { checkFlow, checkMinimum } from './outlook-brute.mjs';
 import { finishTable, moveAllowed } from '../app/js/solver/finish.js';
-import { startCareful, workerCount, timePlan } from '../app/js/solver/careful.js';
+import { startCareful, workerCount, workerMemoryMB, timePlan } from '../app/js/solver/careful.js';
 import { verifyFinish } from './finish.mjs';
 import { stressOne } from './finish-stress.mjs';
 import { messyMonth } from './repair-stress.mjs';
@@ -894,13 +894,19 @@ const check = (name, problems) => results.push({ name, problems });
 // 22. じっくり作る（careful.js）（6-2。docs/じっくり作る案.md の 1・2・4 章）
 {
   const problems = [];
-  // Worker の数（4 章）
+  // Worker の数（4 章）。1本の見込み m は 50人×31日までの月で 1788MB、100人×31日で 2813MB。使ってよいメモリ（deviceMemory の 4分の1。
+  // 分からないときは、タッチだけの機械 1GB・パソコン 2GB）を m で割った数まで。8GB 以下の機械は 1本・16GB は 2本・32GB 以上は 4本
+  const big = 100 * 31;
   const cases = [
-    [{ cpus: 1 }, 1], [{ cpus: 2 }, 1], [{ cpus: 4 }, 3], [{ cpus: 16 }, 4], [{}, 1],
-    [{ cpus: 16, memory: 2 }, 1], [{ cpus: 16, memory: 4 }, 2], [{ cpus: 16, memory: 8 }, 4],
-    [{ cpus: 16, touchOnly: true }, 2], [{ cpus: 16, memory: 8, touchOnly: true }, 2], [{ cpus: 2, touchOnly: true }, 1],
+    [{ cpus: 1 }, 1], [{ cpus: 2 }, 1], [{ cpus: 4 }, 1], [{ cpus: 16 }, 1], [{}, 1],
+    [{ cpus: 16, memory: 2 }, 1], [{ cpus: 16, memory: 4 }, 1], [{ cpus: 16, memory: 8 }, 1], [{ cpus: 16, memory: 16 }, 2], [{ cpus: 4, memory: 32 }, 3], [{ cpus: 16, memory: 32 }, 4],
+    [{ cpus: 16, touchOnly: true }, 1], [{ cpus: 16, memory: 8, touchOnly: true }, 1], [{ cpus: 2, touchOnly: true }, 1], [{ cpus: 16, memory: 32, touchOnly: true }, 2],
+    [{ cpus: 16, memory: 8, cells: 50 * 31 }, 1], [{ cpus: 16, memory: 8, cells: big }, 1], [{ cpus: 16, cells: big }, 1], [{ cpus: 16, memory: 16, cells: 15 * 31 }, 2], [{ cpus: 16, memory: 16, cells: 50 * 31 }, 2], [{ cpus: 16, memory: 16, cells: big }, 1], [{ cpus: 16, memory: 32, cells: 50 * 31 }, 4], [{ cpus: 16, memory: 32, cells: big }, 2],
   ];
   for (const [env, want] of cases) if (workerCount(env) !== want) problems.push(`Worker の数 ${JSON.stringify(env)} → ${workerCount(env)}（${want} のはず）`);
+  for (const [cells, want] of [[0, 1788], [15 * 31, 1788], [50 * 31, 1788], [big, 2813]]) {
+    if (Math.round(workerMemoryMB(cells)) !== want) problems.push(`1本のメモリの見込み（${cells}マス）→ ${Math.round(workerMemoryMB(cells))}MB（${want}MB のはず）`);
+  }
   const tp = timePlan(600);
   if (tp.search !== 570 || tp.finish !== 25) problems.push(`600秒の配分が 探す 570・仕上げ 25 でない（${JSON.stringify(tp)}）`);
 
@@ -1036,7 +1042,18 @@ const check = (name, problems) => results.push({ name, problems });
   }
   if (tested < 6) problems.push(`う の式を確かめられた表が少ない（${tested}）`);
   if (nonzero < 3) problems.push(`う の式の確かめで、件数が 0 でない所が少ない（${nonzero}）`);
-  check(`じっくり作る（Worker の数・選び方・ここまでで終える・中止・止まった・時間の見張り・う の式 ${tested}表）`, problems);
+
+  // 区切って解く（stages.js の softRound。い・う・い2 の「できれば」の段）：見本（飲食店 2026年11月）を 合計 6秒・2秒ずつで解く。
+  // 回ごとの記録が残り、止まった回（番号 −1）が無く、良くなった回の番号が回の数の中にあり、段の状態は「時間切れ」（はじめの答えを渡すため）
+  const roundRun = await solveStaged(S.buildSample('restaurant', 2026, 11), { loadHighs: () => highsLoader(), timeLimit: 6, seed: 1, softRound: 2 });
+  const soft = roundRun.stages?.find((s) => s.key === 'soft');
+  if (!roundRun.ok || !soft?.roundCodes?.length) problems.push(`区切って解くと、回ごとの記録が残らない（${roundRun.reason ?? '記録なし'}）`);
+  else {
+    if (soft.roundCodes.includes(-1)) problems.push(`区切って解いた回に、止まった回がある（${soft.roundCodes.join(',')}）`);
+    if (!soft.roundBetter.every((k) => k >= 1 && k <= soft.roundCodes.length)) problems.push(`良くなった回の番号がおかしい（${soft.roundBetter.join(',')}／${soft.roundCodes.length}回）`);
+    if (soft.status !== 'limit') problems.push(`区切って解いた段の状態が「時間切れ」でない（${soft.status}）`);
+  }
+  check(`じっくり作る（Worker の数・選び方・ここまでで終える・中止・止まった・時間の見張り・う の式 ${tested}表・区切って解く ${soft?.roundCodes?.length ?? 0}回）`, problems);
 }
 
 // 10. 言葉の確かめ：一覧の言葉が、リポジトリのファイル・コミットの文に入っていないか

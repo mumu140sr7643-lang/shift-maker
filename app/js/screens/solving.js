@@ -5,6 +5,7 @@ import { h } from '../dom.js?v=6.2';
 import { rerender } from '../state.js?v=6.2';
 import { notify } from '../dialog.js?v=6.2';
 import { startCareful, workerCount, CAREFUL_SECONDS } from '../solver/careful.js?v=6.2';
+import { monthDays } from '../model.js?v=6.2';
 
 export const QUICK_SECONDS = 60;
 
@@ -20,10 +21,10 @@ export function carefulSeconds() {
   return Number.isInteger(n) && n >= 10 && n <= CAREFUL_SECONDS ? n : CAREFUL_SECONDS;
 }
 
-// じっくり作るの Worker の数（docs/じっくり作る案.md の 4 章）
-export function carefulWorkers() {
+// じっくり作るの Worker の数（docs/じっくり作る案.md の 4 章）。月の大きさ（人数 × 日数）でメモリの見込みが変わるので、データを渡す
+export function carefulWorkers(d) {
   const touchOnly = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches && !matchMedia('(any-pointer: fine)').matches;
-  return workerCount({ cpus: navigator.hardwareConcurrency, memory: navigator.deviceMemory, touchOnly });
+  return workerCount({ cpus: navigator.hardwareConcurrency, memory: navigator.deviceMemory, touchOnly, cells: d.staff.length * monthDays(d) });
 }
 
 // 計算中の仕事（画面を作り直しても残す）
@@ -121,7 +122,7 @@ const totalsText = (x) => `6連勤以上 ${x.sixPlus}件・絶対 ${x.hard}件�
 export function startCarefulSolving({ data, seed, onResult }) {
   if (job) return;
   const seconds = carefulSeconds();
-  const workers = carefulWorkers();
+  const workers = carefulWorkers(data);
   const phaseText = {
     quick: '1分の答えを作っています（保険）',
     search: workers > 1 ? `何通りかで、より良い答えを探しています（${workers}通り同時）` : '1分の答えから、より良い答えを探しています',
@@ -143,7 +144,7 @@ export function startCarefulSolving({ data, seed, onResult }) {
     time,
     quick,
     best,
-    workers === 1 ? h('p', { class: 'help', testid: 'run-single', text: 'このパソコンでは、1通りずつ探します。' }) : null,
+    workers === 1 ? h('p', { class: 'help', testid: 'run-single', text: '1分の答えを、時間いっぱいまで直していきます。' }) : null,
     h('p', { class: 'help', text: '計算のあいだは、ほかの重いアプリを閉じてください。画面を閉じたり、ほかのアプリに切り替えたりすると、計算が止まることがあります。' }),
     h('p', { class: 'help', text: '中止は、作った答えを入れずに終わります（表は前のまま）。ここまでの答えで終えると、いまのいちばん良い答えを入れます。' }),
     earlyWhy,

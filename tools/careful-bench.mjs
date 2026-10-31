@@ -14,12 +14,13 @@ import { spawn } from 'node:child_process';
 import { parseData } from '../app/js/storage.js';
 import { checkTable, compareResults, rankKey } from '../app/js/check.js';
 import { buildSample } from '../app/js/samples.js';
-import { canonicalJSON } from '../app/js/model.js';
+import { canonicalJSON, monthDays } from '../app/js/model.js';
 import { lowerBound, reachedLowerBound } from '../app/js/outlook.js';
 import { RULES } from '../app/js/rules.js';
+import { workerMemoryMB } from '../app/js/solver/careful.js';
 import { makeSample } from './make-sample.mjs';
 import { compareAmounts } from './solve.mjs';
-import { ROOT, gitCommit } from './lib.mjs';
+import { ROOT, gitCommit, errorCount } from './lib.mjs';
 
 const argOf = (n, f) => {
   const i = process.argv.indexOf(`--${n}`);
@@ -116,7 +117,7 @@ if (only.includes('summary')) {
   const avg = (xs) => (xs.length ? Math.round((xs.reduce((a, b) => a + b, 0) / xs.length) * 10) / 10 : null);
 
   const runSet = (conf, its) => {
-    const out = { runs: 0, missing: 0, failed: 0, worseThanQuick: [], improved: 0, lbReached: 0, lbReachedAny: 0, lbReachedAll: 0, lbGaps: [], months: [], avg: {}, wins: {}, pickedBy: {}, tightened: [], amountMismatch: [], approxDiff: [], how: {} };
+    const out = { runs: 0, missing: 0, failed: 0, worseThanQuick: [], improved: 0, lbReached: 0, lbReachedAny: 0, lbReachedAll: 0, lbGaps: [], months: [], avg: {}, wins: {}, pickedBy: {}, tightened: [], amountMismatch: [], approxDiff: [], how: {}, broken: [], wasmMaxMB: {}, softRounds: {}, memoryOver: [], perWorkerMB: [] };
     const sums = { quick: { six: [], hard: [], soft: [] }, picked: { six: [], hard: [], soft: [] } };
     for (const it of its) {
       const lb = lowerBound(it.data);
@@ -129,6 +130,22 @@ if (only.includes('summary')) {
           continue;
         }
         out.runs += 1;
+        // HiGHS が止まった回（番号 −1・onAbort）と、1回の HiGHS の WebAssembly のメモリのいちばん大きいとき（候補ごと）。止まった回は1回でもあれば不具合
+        for (const cand of x.c.candidates ?? []) {
+          const mem = x.c.workerMemory?.[cand.role];
+          const errors = errorCount(cand.stages);
+          if (errors || mem?.aborts) out.broken.push(`${it.id} 回${r} ${cand.role}：番号 −1 ${errors}回・止まった ${mem?.aborts ?? '?'}回`);
+          if (mem) out.wasmMaxMB[cand.role] = Math.max(out.wasmMaxMB[cand.role] ?? 0, mem.wasmMaxMB);
+          const soft = (cand.stages ?? []).find((st) => st.roundCodes);
+          if (soft) out.softRounds[soft.roundCodes.length] = (out.softRounds[soft.roundCodes.length] ?? 0) + 1;
+        }
+        // 1本あたりのメモリ（この node のいちばん多いメモリ − 何もしない node 50MB）÷ 本数 と、本数の式の見込み m（careful.js の workerMemoryMB）
+        if (x.c.maxRssMB && x.c.workers) {
+          const per = Math.round((x.c.maxRssMB - 50) / x.c.workers);
+          const m = Math.round(workerMemoryMB(it.data.staff.length * monthDays(it.data)));
+          out.perWorkerMB.push(per);
+          if (per > m) out.memoryOver.push(`${it.id} 回${r}：1本あたり ${per}MB（見込み ${m}MB）`);
+        }
         if (!x.ok) {
           out.failed += 1;
           row.picked.push(`作れない（${x.c.reason}）`);
@@ -226,6 +243,8 @@ if (only.includes('summary')) {
     console.log(`  平均 1分の答え ${JSON.stringify(s.avg.quick)} → 選んだ答え ${JSON.stringify(s.avg.picked)}`);
     console.log(`  選んだ候補 ${JSON.stringify(s.pickedBy)}・ほかのどの候補より良かった回 ${JSON.stringify(s.wins)}・終わり方 ${JSON.stringify(s.how)}`);
     console.log(`  締め直し 解き直し ${s.tightened.length}・量が減った ${s.tightened.filter((x) => x.applied).length}（量が増えた ${s.tightened.filter((x) => !x.ok).length}）・式の量と検査の量が合わない ${s.amountMismatch.length}・近い形で数える決まりの違い ${s.approxDiff.length}`);
+    console.log(`  HiGHS が止まった・番号 −1 の回 ${s.broken.length}${s.broken.length ? `（${s.broken.slice(0, 5).join('、')}）` : ''}・1回の HiGHS の WebAssembly のメモリ いちばん大きいとき ${JSON.stringify(s.wasmMaxMB)}MB・「できれば」の段の回数 ${JSON.stringify(s.softRounds)}`);
+    console.log(`  1本あたりのメモリ いちばん多い ${s.perWorkerMB.length ? Math.max(...s.perWorkerMB) : '―'}MB・見込み m を超えた回 ${s.memoryOver.length}`);
   }
   console.log(`1分で作る（何も動かしていないとき）との比べ：組 ${summary.vsH.pairs}・良い ${summary.vsH.better}・同じ ${summary.vsH.same}・悪い ${summary.vsH.worse}`);
 }

@@ -1,7 +1,8 @@
 // じっくり作る（6-2）を node で動かす道具。中身は画面と同じ careful.js（Worker は worker_threads）。
 // 使い方: node tools/careful.mjs 保存したファイル.json [--seconds 600] [--workers 4] [--quick 60] [--seed 1] [--out フォルダ]
 //   --seed は1分の答えの種（画面では「作った記録の数 + 1」）。い・う・い2 はそれに 1・2・3 を足す
-// --out に出すもの：careful.json（候補ごとの結果・選んだ答え・答えの一覧の件数と時刻・この node のいちばん多いメモリ maxRssMB（Worker の分も入る））・
+// --out に出すもの：careful.json（候補ごとの結果・選んだ答え・答えの一覧の件数と時刻・この node のいちばん多いメモリ maxRssMB（Worker の分も入る）・
+//   Worker ごとの workerMemory（1回の HiGHS の WebAssembly のメモリのいちばん大きいとき wasmMaxMB・HiGHS が止まった回 aborts））・
 //   answers.json（全部の答えの表。careful-pick.mjs で選び直す）・
 //   result.json（選んだ表を入れたデータ。このアプリで取り込める）・count.json（tools/count.mjs と同じ形）
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
@@ -15,11 +16,17 @@ import { startCareful, CAREFUL_SECONDS } from '../app/js/solver/careful.js';
 
 const WORKER_URL = new URL('./careful-worker.mjs', import.meta.url);
 
+// Worker ごとの HiGHS のメモリ（1回の HiGHS の WebAssembly のメモリのいちばん大きいとき）と、HiGHS が止まった回（careful-worker.mjs が 'end' に付ける）
+export const workerMemory = {};
+
 export function nodeWorker() {
   const w = new Worker(WORKER_URL);
   return {
     post: (m) => w.postMessage(m),
-    onMessage: (fn) => w.on('message', fn),
+    onMessage: (fn) => w.on('message', (m) => {
+      if (m.type === 'end' && m.memory) workerMemory[m.role] = m.memory;
+      fn(m);
+    }),
     onError: (fn) => {
       w.on('error', fn);
       w.on('exit', (code) => code !== 0 && fn(new Error(`exit ${code}`)));
@@ -70,7 +77,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   if (out) {
     mkdirSync(out, { recursive: true });
     const maxRssMB = Math.round(process.resourceUsage().maxRSS / 1024);
-    writeFileSync(join(out, 'careful.json'), JSON.stringify({ ...r, table: undefined, answers: r.answers?.map((a) => ({ ...a, table: undefined })), maxRssMB, workers: Number(arg('workers', 4)) }, null, 2));
+    writeFileSync(join(out, 'careful.json'), JSON.stringify({ ...r, table: undefined, answers: r.answers?.map((a) => ({ ...a, table: undefined })), maxRssMB, workers: Number(arg('workers', 4)), workerMemory }, null, 2));
     if (r.ok) {
       writeFileSync(join(out, 'answers.json'), JSON.stringify(r.answers));
       writeFileSync(join(out, 'result.json'), canonicalJSON(res.data));

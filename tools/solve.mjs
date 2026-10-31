@@ -14,6 +14,7 @@ import { pathToFileURL } from 'node:url';
 import { parseData } from '../app/js/storage.js';
 import { checkTable } from '../app/js/check.js';
 import { solveStaged } from '../app/js/solver/stages.js';
+import { buildModel } from '../app/js/solver/build.js';
 import { canonicalJSON, clone } from '../app/js/model.js';
 import { prepareRestart } from '../app/js/solver/repair.js';
 import highsLoader from '../vendor/highs/highs.mjs';
@@ -27,20 +28,30 @@ function arg(name, fallback = null) {
 //   exact：同じになるはずのもの／approx：近い形で数えているので違ってよいもの
 //   6連勤以上・連勤超過は、前の月だけで超えていた分（どう作っても変わらない）を式に入れていないので、検査の量から引く
 //   exact（じっくり作るの候補 う の式）のときは、時間帯の切り替え回数・責任者の順位も「同じになるはずのもの」に入れる
+//   段に入っていない決まりは、式の量が定数だけ（どう作っても変わらない。例：その時間帯に出られる人が、だれもそのスキルを持たない）か、決まりが無い。
+//   定数は check.js も数えるので、同じ式を作り直して、その定数を式の量にする（段に入っていれば、量は solved.amounts にある）
 export function compareAmounts(solved, counted, data, { exact: exactModel = false } = {}) {
   const by = counted.byRule;
   const prevDays = (it) => (it.from < 1 ? 1 - it.from : 0);
   const six = counted.items.filter((it) => it.rule === 'sixPlus').reduce((s, it) => s + it.amount - 5 - Math.max(0, prevDays(it) - 5), 0);
   const limitOf = (pid) => data.staff.find((p) => p.id === pid)?.maxConsecutive ?? data.settings.work.maxConsecutive;
   const over = counted.items.filter((it) => it.rule === 'overStreak').reduce((s, it) => s + it.amount - Math.max(0, prevDays(it) - limitOf(it.staff)), 0);
+  let model = null;
+  const amt = (rule) => {
+    if (solved.amounts[rule] !== undefined) return solved.amounts[rule];
+    model ??= buildModel(data, { exact: exactModel });
+    return model.stages.some((st) => st.rules.includes(rule)) ? 0 : model.amountOf(rule, new Map());
+  };
   const exact = {
-    sixPlus: { solver: solved.amounts.sixPlus ?? 0, check: six },
-    shortage: { solver: solved.amounts.shortage ?? 0, check: by.shortage.amount },
-    offShort: { solver: solved.amounts.offShort ?? 0, check: by.offShort.amount },
-    overStreak: { solver: solved.amounts.overStreak ?? 0, check: over },
-    overstaff: { solver: solved.amounts.overstaff ?? 0, check: by.overstaff.amount },
-    onePerDayDup: { solver: solved.amounts.onePerDayDup ?? 0, check: by.onePerDayDup.amount },
-    lateToEarly: { solver: solved.amounts.lateToEarly ?? 0, check: by.lateToEarly.count },
+    sixPlus: { solver: amt('sixPlus'), check: six },
+    shortage: { solver: amt('shortage'), check: by.shortage.amount },
+    offShort: { solver: amt('offShort'), check: by.offShort.amount },
+    overStreak: { solver: amt('overStreak'), check: over },
+    overstaff: { solver: amt('overstaff'), check: by.overstaff.amount },
+    onePerDayDup: { solver: amt('onePerDayDup'), check: by.onePerDayDup.amount },
+    lateToEarly: { solver: amt('lateToEarly'), check: by.lateToEarly.count },
+    skillShort: { solver: amt('skillShort'), check: by.skillShort.amount },
+    twoOffLateEarly: { solver: amt('twoOffLateEarly'), check: by.twoOffLateEarly.count },
   };
   const approx = {
     switchInStreak: { solver: solved.amounts.switchInStreak ?? 0, check: by.switchInStreak.count },
@@ -48,8 +59,8 @@ export function compareAmounts(solved, counted, data, { exact: exactModel = fals
     leaderRank: { solver: null, check: by.leaderRank.count },
   };
   if (exactModel) {
-    exact.switchCount = { solver: solved.amounts.switchCount ?? 0, check: by.switchCount.amount };
-    exact.leaderRank = { solver: solved.amounts.leaderRank ?? 0, check: by.leaderRank.count };
+    exact.switchCount = { solver: amt('switchCount'), check: by.switchCount.amount };
+    exact.leaderRank = { solver: amt('leaderRank'), check: by.leaderRank.count };
     delete approx.switchCount;
     delete approx.leaderRank;
   }

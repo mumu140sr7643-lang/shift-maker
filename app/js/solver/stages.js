@@ -60,15 +60,55 @@ function runLp(highs, text, options, start) {
   }
 }
 
-// 返す：{ ok, reason?, conflicts?, table?, stages: [{ key, name, status, seconds, value, code }], amounts, size, seconds }
+// 「できれば」の段を区切って解く（softRound 秒ごと）。1回の HiGHS を長く解くと、メモリが増え続けて上限（2GB）に当たり、止まって答えが消えるため
+// （2026-10-31 測り G：15人×30日を候補 い の解き方で、120秒まで 749MB・240秒で 2039MB、570秒では 448秒で止まった）。
+// 回ごとに HiGHS を作り直し（前の HiGHS は持ち続けない）、それまでのいちばん良い答えを、はじめの答えとして渡す。種は回ごとに変える（1回目は種のまま、2回目は ＋1 …）。
+// 答えが無い・止まった回は、それまでの答えのまま次の回へ進む。HiGHS が「解ききった」と言い、良くならなかった回で終える。
+// 良くなった回ごとに onRound(values, 回の番号) を呼ぶ。返す：{ res（いちばん良い回の答え。無ければ values: null）, codes（回ごとの HiGHS の答えの状態の番号）, improved（良くなった回の番号） }
+async function solveInRounds({ loadHighs, text, options, start, objective, round, seconds, elapsed, shouldStop, onRound }) {
+  let best = null;
+  let bestValue = start ? valueOf(objective, start) : Infinity;
+  let from = start;
+  const codes = [];
+  const improved = [];
+  for (let k = 0; ; k += 1) {
+    const left = seconds - elapsed();
+    if (k > 0 && (left < 1 || shouldStop())) break;
+    const opt = { ...options, time_limit: Math.max(1, Math.min(round, left)), random_seed: options.random_seed + k };
+    let r;
+    try {
+      r = runLp(await loadHighs(), text, opt, from);
+    } catch {
+      r = { code: -1, objective: Infinity, values: null };
+    }
+    codes.push(r.code);
+    const v = r.values ? valueOf(objective, r.values) : null;
+    const better = v !== null && v < bestValue - 1e-6;
+    if (better || (v !== null && !best && v <= bestValue + 1e-6)) {
+      best = r;
+      bestValue = Math.min(bestValue, v);
+      from = r.values;
+      if (better) {
+        improved.push(k + 1);
+        onRound(r.values, k + 1);
+      }
+    }
+    if (r.code === OPTIMAL && !better) break;
+  }
+  return { res: best ?? { code: codes[codes.length - 1], objective: Infinity, values: null }, codes, improved };
+}
+
+// 返す：{ ok, reason?, conflicts?, table?, stages: [{ key, name, status, seconds, value, code, roundCodes?, roundBetter? }], amounts, size, seconds }
+//   roundCodes・roundBetter：区切って解いた段の、回ごとの HiGHS の答えの状態の番号と、良くなった回の番号
 //   status: 'solved'（差0で最適）| 'limit'（時間・調べる数の上限で途中の答え）| 'kept'（答えが無い・前の段の答えより悪いので、前の段の答えのまま）| 'none'
 //   reason: 'conflict'（解く前のぶつかり）| 'infeasible'（答えが無い）| 'no-answer'（段1で上限までに答えが無い）| 'stopped'（中止）
 export async function solveStaged(data, opts) {
   // maxStages・presolve・presolveRuleOff・warmStart は確かめの道具だけが変える（はじめの段だけ解く・前処理の不具合を調べる）
   // keepCurrent・changeLimit はエラーを自動で直す（repair.js）だけが使う
-  // exact・tighten はじっくり作る（careful.js）だけが使う（exact は候補 う の式。tighten は時間切れの「絶対」の段の量の締め直し）
+  // exact・tighten・softRound はじっくり作る（careful.js）だけが使う（exact は候補 う の式。tighten は時間切れの「絶対」の段の量の締め直し。
+  // softRound は「できれば」の段を区切って解く1回の秒。時間で区切るときだけ効く）
   // hardOptions は確かめの道具（tools/tighten-check.mjs）だけが使う（「できれば」より前の段に足す HiGHS の設定。段を早めに止めて、締め直しを起こすため）
-  const { loadHighs, timeLimit = null, nodeLimit = null, seed = 1, leaderWeight = 0, onProgress = () => {}, shouldStop = () => false, maxStages = Infinity, presolve = 'on', presolveRuleOff = PRESOLVE_RULE_OFF, warmStart = WARM_START, softWarmStart = SOFT_WARM_START, softOptions = SOFT_OPTIONS, hardOptions = {}, keepCurrent = false, changeLimit = null, exact = false, tighten = false } = opts;
+  const { loadHighs, timeLimit = null, nodeLimit = null, seed = 1, leaderWeight = 0, onProgress = () => {}, shouldStop = () => false, maxStages = Infinity, presolve = 'on', presolveRuleOff = PRESOLVE_RULE_OFF, warmStart = WARM_START, softWarmStart = SOFT_WARM_START, softOptions = SOFT_OPTIONS, hardOptions = {}, keepCurrent = false, changeLimit = null, exact = false, tighten = false, softRound = null } = opts;
   const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
   const conflicts = solveConflicts(data);
   if (conflicts.length) return { ok: false, reason: 'conflict', conflicts, stages: [] };
@@ -91,15 +131,35 @@ export async function solveStaged(data, opts) {
     let res;
     let retried = false;
     const warm = warmStart || (softWarmStart && st.key === 'soft');
+    let roundCodes = null;
+    let roundBetter = null;
     try {
       const text = model.lp(st.objective, bounds);
-      res = runLp(await loadHighs(), text, options, warm ? last : null);
-      // それでも「答えが無い」と出たときは、念のため前処理を止めて解き直して確かめる（上の PRESOLVE_RULE_OFF を見よ）
-      if (INFEASIBLE.has(res.code) && options.presolve !== 'off') {
-        retried = true;
-        const again = { ...options, presolve: 'off' };
-        if (timeLimit) again.time_limit = Math.max(1, timeLimit - (now() - t0) / 1000);
-        res = runLp(await loadHighs(), text, again, warm ? last : null);
+      if (softRound && timeLimit && st.key === 'soft') {
+        const done = await solveInRounds({
+          loadHighs,
+          text,
+          options,
+          start: warm ? last : null,
+          objective: st.objective,
+          round: softRound,
+          seconds: options.time_limit,
+          elapsed: () => (now() - s0) / 1000,
+          shouldStop,
+          onRound: (values, round) => onProgress({ stage: i + 1, count: model.stages.length, name: st.name, phase: 'round', round, seconds: (now() - t0) / 1000, table: model.readTable(values) }),
+        });
+        res = done.res;
+        roundCodes = done.codes;
+        roundBetter = done.improved;
+      } else {
+        res = runLp(await loadHighs(), text, options, warm ? last : null);
+        // それでも「答えが無い」と出たときは、念のため前処理を止めて解き直して確かめる（上の PRESOLVE_RULE_OFF を見よ）
+        if (INFEASIBLE.has(res.code) && options.presolve !== 'off') {
+          retried = true;
+          const again = { ...options, presolve: 'off' };
+          if (timeLimit) again.time_limit = Math.max(1, timeLimit - (now() - t0) / 1000);
+          res = runLp(await loadHighs(), text, again, warm ? last : null);
+        }
       }
     } catch (e) {
       res = { code: -1, objective: Infinity, values: null, error: String(e?.message ?? e) };
@@ -149,7 +209,7 @@ export async function solveStaged(data, opts) {
     }
     bounds.push({ objective: st.objective, max: value });
     const suspect = after !== null && before !== null && after > before + 1e-6 && res.code === OPTIMAL;
-    records.push({ key: st.key, name: st.name, rules: st.rules, status, seconds, value: Math.round(value * 1000) / 1000, code: res.code, retried, ...(suspect ? { suspect } : {}), ...(tightened ? { tightened } : {}) });
+    records.push({ key: st.key, name: st.name, rules: st.rules, status, seconds, value: Math.round(value * 1000) / 1000, code: res.code, retried, ...(suspect ? { suspect } : {}), ...(tightened ? { tightened } : {}), ...(roundCodes ? { roundCodes, roundBetter } : {}) });
     onProgress({ stage: i + 1, count: model.stages.length, name: st.name, phase: 'done', seconds: (now() - t0) / 1000, table: model.readTable(last) });
   }
   const amounts = {};
