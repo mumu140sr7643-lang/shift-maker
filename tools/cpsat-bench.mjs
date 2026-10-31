@@ -1,14 +1,16 @@
 // HiGHS の「1分で作る」と CP-SAT を比べる道具（docs/OR-Tools の試し.md の 4 章）。作り物のデータだけ。
-// 使い方: node tools/cpsat-bench.mjs [--only H,C8,C4,C1,C8-600,finish,summary] [--months 0-17]
+// 使い方: node tools/cpsat-bench.mjs [--only H,C8,HC8,C4,C1,C8-600,finish,summary] [--months 0-17]
 //   18か月（見本3つ × 2026年11月・2027年2月・5月・8月 ＋ 作り物 6通り）を作り、次を回す。答えは全部 tools/out/cpsat-bench/ に残す。
 //     H      ：HiGHS の1分で作る（tools/solve.mjs --time 60）× 3回。1つずつ、ほかに何も動かさない
 //     C8     ：CP-SAT Worker 8・60秒 × 種 1・2・3。1つずつ、ほかに何も動かさない（決め方に使う）
+//     HC8    ：「できれば」より前の5段は HiGHS（1分で作ると同じ配分）、「できれば」の段だけ CP-SAT Worker 8（残りの時間全部）× 種 1・2・3。1つずつ（決め方に使う）
 //     C4     ：Worker 4・60秒 × 種 1・2・3（2つずつ）。C1：Worker 1・60秒 × 1回（8つずつ）。C8-600：Worker 8・600秒 × 1回（1つずつ）
-//     finish ：H と C8 の答えに 6-1 の仕上げ（tools/finish.mjs --seconds 25。8つずつ）
+//     finish ：H・C8・HC8 の答えに 6-1 の仕上げ（tools/finish.mjs --seconds 25。8つずつ）
 //     summary：比べの表（summary.json）。もうある答えは作り直さない（消してから回すと作り直す）
 // 決め方（確かめ役が決めた。測る前）：
 //   - 月ごとに C8 の3回 × H の3回 の9組（18か月で 162組）。並べる順の、できれば より前の全部（6連勤以上・人員不足・絶対の合計・連勤の超過・公休の不足）で、C8 が悪い組が 0。
 //   - できれば：C8 の54回の平均 ≦ H の54回の平均 × 0.8。
+//   - HC8 にも同じ数え方を当てる。両方とも届いたら、できれば の平均が小さいほうを採る。どちらも届かなければ、パソコン版は作らずに 6-2 に戻る。
 import { writeFileSync, readFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawn } from 'node:child_process';
@@ -23,7 +25,7 @@ const argOf = (n, f) => {
   const i = process.argv.indexOf(`--${n}`);
   return i >= 0 ? process.argv[i + 1] : f;
 };
-const only = argOf('only', 'H,C8,C4,C1,C8-600,finish,summary').split(',');
+const only = argOf('only', 'H,C8,HC8,C4,C1,C8-600,finish,summary').split(',');
 const OUT = join(ROOT, 'tools', 'out', 'cpsat-bench');
 mkdirSync(OUT, { recursive: true });
 
@@ -77,6 +79,7 @@ const dirOf = (it, conf, r) => join(OUT, it.id, `${conf}-r${r}`);
 const CONFIGS = {
   H: { runs: [1, 2, 3], jobs: 1, args: () => ['--time', '60'], tool: 'solve.mjs' },
   C8: { runs: [1, 2, 3], jobs: 1, args: (r) => ['--workers', '8', '--time', '60', '--seed', String(r)], tool: 'cpsat.mjs' },
+  HC8: { runs: [1, 2, 3], jobs: 1, args: (r) => ['--hybrid', '--workers', '8', '--time', '60', '--seed', String(r)], tool: 'cpsat.mjs' },
   C4: { runs: [1, 2, 3], jobs: 2, args: (r) => ['--workers', '4', '--time', '60', '--seed', String(r)], tool: 'cpsat.mjs' },
   C1: { runs: [1], jobs: 8, args: (r) => ['--workers', '1', '--time', '60', '--seed', String(r)], tool: 'cpsat.mjs' },
   'C8-600': { runs: [1], jobs: 1, args: (r) => ['--workers', '8', '--time', '600', '--seed', String(r)], tool: 'cpsat.mjs' },
@@ -87,7 +90,7 @@ for (const [conf, c] of Object.entries(CONFIGS)) {
   await pool(tasks, c.jobs, ({ it, r }) => runNode([join(ROOT, 'tools', c.tool), it.file, ...c.args(r), '--out', dirOf(it, conf, r)]), conf);
 }
 if (only.includes('finish')) {
-  const tasks = items.flatMap((it) => ['H', 'C8'].flatMap((conf) => [1, 2, 3].map((r) => dirOf(it, conf, r)))).filter((d) => existsSync(join(d, 'result.json')) && !existsSync(join(d, 'finish', 'finished.json')));
+  const tasks = items.flatMap((it) => ['H', 'C8', 'HC8'].flatMap((conf) => [1, 2, 3].map((r) => dirOf(it, conf, r)))).filter((d) => existsSync(join(d, 'result.json')) && !existsSync(join(d, 'finish', 'finished.json')));
   await pool(tasks, 8, (d) => runNode([join(ROOT, 'tools', 'finish.mjs'), join(d, 'result.json'), '--seconds', '25', '--out', join(d, 'finish')]), '仕上げ');
 }
 
@@ -162,10 +165,14 @@ if (only.includes('summary')) {
       ubHits: xs.filter((x) => x.ubHits?.length).length,
     };
   }
-  const summary = { cpus: (await import('node:os')).cpus().length, C8: compareSet('C8', false), C8finished: compareSet('C8', true), C4: compareSet('C4', false), extra, runInfo };
+  const summary = { cpus: (await import('node:os')).cpus().length, C8: compareSet('C8', false), C8finished: compareSet('C8', true), HC8: compareSet('HC8', false), HC8finished: compareSet('HC8', true), C4: compareSet('C4', false), extra, runInfo };
+  // 決め方：C8 と HC8 のうち届いたもの。両方届いたら できれば の平均が小さいほう
+  const passed = ['C8', 'HC8'].filter((k) => summary[k].adopt);
+  summary.pick = passed.length ? passed.sort((a, b) => summary[a].softAvgC - summary[b].softAvgC)[0] : null;
   writeFileSync(join(OUT, 'summary.json'), JSON.stringify(summary, null, 2));
-  for (const [name, s] of Object.entries({ 'C8 と H': summary.C8, 'C8＋仕上げ と H＋仕上げ': summary.C8finished, 'C4 と H（報告だけ）': summary.C4 })) {
-    console.log(`${name}：組 ${s.pairs}（足りない答え ${s.missing}）・重い所で悪い組 ${s.heavyWorse}・良い ${s.better}・同じ ${s.same}・悪い ${s.worse}・できれば平均 ${s.softAvgC?.toFixed(1)} と ${s.softAvgH?.toFixed(1)}${name.startsWith('C8 と') ? ` → ${s.adopt ? '採る' : '採らない'}` : ''}`);
+  for (const [name, s] of Object.entries({ 'C8 と H': summary.C8, 'C8＋仕上げ と H＋仕上げ': summary.C8finished, 'HC8 と H': summary.HC8, 'HC8＋仕上げ と H＋仕上げ': summary.HC8finished, 'C4 と H（報告だけ）': summary.C4 })) {
+    console.log(`${name}：組 ${s.pairs}（足りない答え ${s.missing}）・重い所で悪い組 ${s.heavyWorse}・良い ${s.better}・同じ ${s.same}・悪い ${s.worse}・できれば平均 ${s.softAvgC?.toFixed(1)} と ${s.softAvgH?.toFixed(1)}${/^H?C8 と/.test(name) ? ` → ${s.adopt ? '届いた' : '届かない'}` : ''}`);
   }
+  console.log(`決め方：${summary.pick ? `${summary.pick} を採る` : 'どちらも届かない（パソコン版は作らずに 6-2 に戻る）'}`);
   for (const [conf, x] of Object.entries(runInfo)) console.log(`${conf}：${x.runs}回・答えが出なかった ${x.noAnswer}・メモリ最大 ${x.peakMB}MB・上限に当たった ${x.ubHits}・ortools ${x.ortools.join(',')}`);
 }

@@ -1,5 +1,7 @@
 // OR-Tools の CP-SAT で自動で作る（docs/OR-Tools の試し.md）。測るためだけ。アプリには入れない。作り物のデータだけ。
-// 使い方: node tools/cpsat.mjs 保存したファイル.json [--workers 8] [--time 60] [--seed 1] [--ub-times 1] [--out フォルダ]
+// 使い方: node tools/cpsat.mjs 保存したファイル.json [--workers 8] [--time 60] [--seed 1] [--ub-times 1] [--hybrid] [--out フォルダ]
+//   --hybrid（HC8）：6連勤以上〜ほかの絶対の段は HiGHS で解き（時間の配分も1分で作ると同じ。stages.js の solveStaged をそのまま使う）、
+//   「できれば」の段だけを CP-SAT で解く。HiGHS の段の量を上限として足し、HiGHS の表をヒントに渡す。時間は 60秒の残り全部。
 //   式は build.js が HiGHS に渡すものと同じ（LP の文）。6段の流れは tools/cpsat_run.py（Python の ortools）が全部回す。
 //   この道具は、式を作って渡し、返ってきた答えを build.js の readTable で表にし、check.js で数える。
 //   Python は SHIFT_MAKER_PYTHON（ふだんの Python を変えないよう、別の箱 venv の python.exe）。無ければ python。
@@ -13,6 +15,8 @@ import { spawn } from 'node:child_process';
 import { parseData } from '../app/js/storage.js';
 import { checkTable, solveConflicts } from '../app/js/check.js';
 import { buildModel } from '../app/js/solver/build.js';
+import { solveStaged } from '../app/js/solver/stages.js';
+import highsLoader from '../vendor/highs/highs.mjs';
 import { canonicalJSON, clone, monthDays } from '../app/js/model.js';
 import { compareAmounts } from './solve.mjs';
 import { ROOT } from './lib.mjs';
@@ -24,7 +28,7 @@ function arg(name, fallback = null) {
 
 export const PYTHON = process.env.SHIFT_MAKER_PYTHON || 'python';
 
-function runPython(input) {
+export function runPython(input) {
   return new Promise((resolve) => {
     const p = spawn(PYTHON, ['-B', join(ROOT, 'tools', 'cpsat_run.py')], { stdio: ['pipe', 'pipe', 'pipe'] });
     const out = [];
@@ -41,6 +45,50 @@ function runPython(input) {
     });
     p.stdin.end(Buffer.from(JSON.stringify(input), 'utf8'));
   });
+}
+
+const linJson = (l) => ({ c: l.c, t: [...l.t] });
+
+// 表から、マスの 2択の変数の値（ヒント）を作る。名前は build.js と同じ（x_人_日_シフト・off_人_日 など）
+export function hintOf(data, table) {
+  const hint = {};
+  const N = monthDays(data);
+  for (const p of data.staff) {
+    for (let d = 1; d <= N; d += 1) {
+      const v = table[p.id]?.[d];
+      for (const s of data.settings.shifts) hint[`x_${p.id}_${d}_${s.id}`] = v?.kind === 'shift' && v.shift === s.id ? 1 : 0;
+      for (const k of ['off', 'paid', 'spare', 'ake']) hint[`${k}_${p.id}_${d}`] = v?.kind === k ? 1 : 0;
+    }
+  }
+  return hint;
+}
+
+// HC8：HiGHS で「できれば」より前の段を解き、「できれば」の段だけを CP-SAT で解く
+export async function hybridFile(data, { workers = 8, time = 60, seed = 1 } = {}) {
+  const t0 = Date.now();
+  const model = buildModel(data);
+  const last = model.stages[model.stages.length - 1];
+  const softAt = last?.key === 'soft' ? model.stages.length - 1 : model.stages.length;
+  const h = await solveStaged(data, { loadHighs: () => highsLoader(), timeLimit: time, seed: 1, maxStages: softAt });
+  if (!h.ok) return { solved: { ...h, hybrid: true } };
+  let table = h.table;
+  const stages = [...h.stages];
+  let info = {};
+  if (softAt < model.stages.length) {
+    const bounds = h.stages.map((rec, i) => ({ objective: linJson(model.stages[i].objective), max: rec.value }));
+    const left = Math.max(1, time - (Date.now() - t0) / 1000);
+    const res = await runPython({ lp: model.lp(last.objective, []), stages: [{ key: last.key, name: last.name, objective: linJson(last.objective) }], bounds, hint: hintOf(data, h.table), time: left, workers, seed, ub: monthDays(data) * Math.max(1, data.staff.length) });
+    info = { ortools: res.ortools, peak: res.peak, loadSeconds: res.loadSeconds, importSeconds: res.importSeconds, workers, seed, ubHits: res.ubHits ?? [], softTime: Math.round(left * 100) / 100, error: res.error };
+    if (res.ok) {
+      table = model.readTable(new Map(Object.entries(res.values)));
+      stages.push({ ...res.stages[0], rules: last.rules });
+    } else stages.push({ key: last.key, name: last.name, rules: last.rules, status: 'kept', code: res.reason, seconds: res.seconds ?? null, value: null });
+  }
+  const solved = { ok: true, hybrid: true, table, stages, size: model.size, seconds: Math.round((Date.now() - t0) / 10) / 100, ...info };
+  const out = clone(data);
+  out.month.table = table;
+  const counted = checkTable(out);
+  return { solved, data: out, counted, compare: { exact: {}, approx: {} } };
 }
 
 // 返す：{ solved（stages.js の solveStaged と同じ形に近いもの）, data（表を入れたデータ）, counted, compare }
@@ -75,7 +123,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     console.error(`読めませんでした: ${r.error.join(' / ')}`);
     process.exit(1);
   }
-  const res = await cpsatFile(r.data, { workers: Number(arg('workers', 8)), time: Number(arg('time', 60)), seed: Number(arg('seed', 1)), ubTimes: Number(arg('ub-times', 1)) });
+  const opts = { workers: Number(arg('workers', 8)), time: Number(arg('time', 60)), seed: Number(arg('seed', 1)), ubTimes: Number(arg('ub-times', 1)) };
+  const res = process.argv.includes('--hybrid') ? await hybridFile(r.data, opts) : await cpsatFile(r.data, opts);
   const out = arg('out');
   if (out) {
     mkdirSync(out, { recursive: true });
@@ -88,7 +137,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   }
   const s = res.solved;
   console.log(`結果: ${s.ok ? 'できた' : `できなかった（${s.reason}${s.error ? `：${s.error}` : ''}）`}  ortools ${s.ortools ?? '?'}・Worker ${s.workers ?? '?'}・式を読む ${s.loadSeconds ?? '?'}秒・メモリ ${s.peak ? Math.round(s.peak / 2 ** 20) : '?'}MB`);
-  for (const st of s.stages) console.log(`  段 ${st.name}: ${st.status}（CP-SAT の状態 ${st.code}） ${st.seconds}秒 量=${st.value}`);
+  for (const st of s.stages) console.log(`  段 ${st.name}: ${st.status}（状態 ${st.code}） ${st.seconds}秒 量=${st.value}`);
   if (s.ubHits?.length) console.log(`× 量の変数が上限にぴったり当たった：${s.ubHits.slice(0, 5).join(' ')}（上限を広げて測り直す）`);
   if (s.conflicts) for (const c of s.conflicts.slice(0, 10)) console.log(`  ぶつかり: ${c.text}`);
   if (res.counted) console.log(`検査: ${JSON.stringify(res.counted.totals)}`);

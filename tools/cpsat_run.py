@@ -191,6 +191,73 @@ class Model:
         return m, coefs, Fraction(obj['c']).limit_denominator(10 ** 6)
 
 
+def bound_of(model, b):
+    """{"objective": {c, t}, "max": 上限} → (整数の係数, 上限の整数)。上限が倍の細かさにほぼ乗っていれば、その値（小数の誤差を丸める）"""
+    m, coefs, const = model.stage_objective(b['objective'])
+    x = (Fraction(b['max']).limit_denominator(10 ** 6) - const) * m
+    r = round(x)
+    return coefs, int(r) if abs(x - r) < Fraction(1, 1000) else x.numerator // x.denominator
+
+
+def check(msg):
+    """HiGHS の答えを CP-SAT の式にそのまま入れて確かめる（解かないで済む確かめ）。
+    checks: [{"objective", "bounds": [...], "values": {名前: 値}, "value": HiGHS の段の量}]
+    1つずつ返す：direct（そのまま入れて、全部の式・上限の中・段の量が同じ）。そのまま入らないときは、
+    量の変数は HiGHS の中では小数をとれる（その段で重みの無い量は、どんな値でもよい）ので、2択の変数を HiGHS の値に決めて、
+    量の変数だけを CP-SAT に選ばせ、段の量が HiGHS 以下になるか（fixed）を見る"""
+    model = Model(msg['lp'], msg['ub'])
+    out = []
+    for ck in msg['checks']:
+        m, coefs, const = model.stage_objective(ck['objective'])
+        bounds = [bound_of(model, b) for b in ck.get('bounds', [])]
+        vals = ck['values']
+        ints = []
+        offgrid = 0
+        offnames = []
+        for v in model.names:
+            x = vals.get(v, 0) * model.scale.get(v, 1)
+            r = round(x)
+            if abs(x - r) > 1e-5:
+                offgrid += 1
+                if len(offnames) < 5:
+                    offnames.append([v, vals.get(v, 0), model.scale.get(v, 1)])
+            ints.append(int(r))
+        violated = 0
+        for c in model.proto.constraints:
+            lhs = sum(a * ints[j] for a, j in zip(c.linear.coeffs, c.linear.vars))
+            if not (c.linear.domain[0] <= lhs <= c.linear.domain[1]):
+                violated += 1
+        for bc, bmax in bounds:
+            if sum(a * ints[j] for a, j in bc) > bmax:
+                violated += 1
+        domain_out = sum(1 for j, v in enumerate(model.proto.variables) if not (v.domain[0] <= ints[j] <= v.domain[1]))
+        obj = float(Fraction(sum(a * ints[j] for a, j in coefs), m) + const)
+        rec = {'direct': offgrid == 0 and violated == 0 and domain_out == 0 and abs(obj - ck['value']) < 1e-4,
+               'offgrid': offgrid, 'offNames': offnames, 'violated': violated, 'domainOut': domain_out, 'objective': obj, 'highs': ck['value']}
+        if not rec['direct']:
+            cm = cp_model.CpModel()
+            p = cm.proto
+            p.copy_from(model.proto)
+            for j, v in enumerate(model.names):
+                if v in model.binaries:
+                    p.variables[j].domain.clear()
+                    p.variables[j].domain.extend([ints[j], ints[j]])
+            for bc, bmax in bounds:
+                c = p.constraints.add()
+                c.linear.vars.extend([j for _, j in bc])
+                c.linear.coeffs.extend([a for a, _ in bc])
+                c.linear.domain.extend([-BIG, bmax])
+            p.objective.vars.extend([j for _, j in coefs])
+            p.objective.coeffs.extend([a for a, _ in coefs])
+            solver = cp_model.CpSolver()
+            solver.parameters.max_time_in_seconds = 20
+            solver.parameters.num_workers = int(msg.get('workers', 4))
+            st = solver.Solve(cm)
+            rec['fixed'] = {'status': solver.StatusName(st), 'objective': float(Fraction(int(round(solver.ObjectiveValue())), m) + const) if st in (cp_model.OPTIMAL, cp_model.FEASIBLE) else None}
+        out.append(rec)
+    return {'ok': True, 'checks': out}
+
+
 def run(msg):
     t0 = time.perf_counter()
     model = Model(msg['lp'], msg['ub'])
@@ -201,8 +268,10 @@ def run(msg):
     stages = msg['stages']
     objs = [model.stage_objective(st['objective']) for st in stages]
     records = []
-    bounds = []  # [(coefs, 上限の整数)]
+    bounds = [bound_of(model, b) for b in msg.get('bounds', [])]  # [(coefs, 上限の整数)]。はじめから渡された上限（HC8：HiGHS で解いた段）
     last = None  # いまの答え（整数にした変数の値の並び）
+    # はじめのヒント（HC8：HiGHS の表から作った、マスの 2択の変数の値。全部の変数でなくてよい）
+    first_hint = [(model.index[v], int(round(val * model.scale.get(v, 1)))) for v, val in (msg.get('hint') or {}).items() if v in model.index]
 
     def value_int(coefs, sol):
         return sum(a * sol[i] for a, i in coefs)
@@ -224,6 +293,9 @@ def run(msg):
         if last is not None:
             p.solution_hint.vars.extend(range(len(model.names)))
             p.solution_hint.values.extend(last)
+        elif first_hint:
+            p.solution_hint.vars.extend([j for j, _ in first_hint])
+            p.solution_hint.values.extend([v for _, v in first_hint])
         solver = cp_model.CpSolver()
         solver.parameters.max_time_in_seconds = max(0.1, budget_for(i, len(stages), total, time.perf_counter() - t0))
         solver.parameters.num_workers = workers
@@ -261,7 +333,7 @@ def run(msg):
 if __name__ == '__main__':
     msg = json.loads(sys.stdin.buffer.read().decode('utf-8'))
     try:
-        out = run(msg)
+        out = check(msg) if msg.get('mode') == 'check' else run(msg)
     except Exception as e:  # 道具の中のまちがいは、node の側へ文で返す
         out = {'ok': False, 'reason': 'error', 'error': f'{type(e).__name__}: {e}'}
     sys.stdout.buffer.write(json.dumps(out, ensure_ascii=False).encode('utf-8'))
