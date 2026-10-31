@@ -1,8 +1,8 @@
 // 業種の見本。スタッフはすべて作り物（A・B・C…）。
 // 「ちょうど良くきつい月」（v3-3）：人には少し余裕を持たせ（希望が無ければ、どの月も「絶対」0）、
 // 希望の例を少し入れて、必ず起きる「絶対」を 1〜2件 作る。公休の数は月の日数に合わせる（CLAUDE.md の記録）。
-import { emptyData, newRank, newSkill, newShift, newStaff, newSpecialDay, newId, canonicalJSON, setRequest } from './model.js?v=4.1';
-import { daysInMonth } from './calendar.js?v=4.1';
+import { emptyData, newRank, newSkill, newShift, newStaff, newSpecialDay, newId, canonicalJSON, setRequest } from './model.js?v=4.2';
+import { daysInMonth } from './calendar.js?v=4.2';
 
 export const SAMPLE_KINDS = [
   {

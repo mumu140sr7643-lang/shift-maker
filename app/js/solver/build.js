@@ -1,8 +1,8 @@
 // 自動で作るときの式を作る（docs/自動で作る案.md の 2〜4 章）。画面には触らない。ブラウザでも node でも使う。
 // 式は HiGHS が読める「LP の文」の形で作る。どの答えを採るかは、できた表を check.js で数えて決める。
-import { shiftById, monthDays, needOn, rankOrder, cellOf } from '../model.js?v=4.1';
-import { strengthOf } from '../rules.js?v=4.1';
-import { weekdayOf } from '../calendar.js?v=4.1';
+import { shiftById, monthDays, needOn, rankOrder, cellOf } from '../model.js?v=4.2';
+import { strengthOf } from '../rules.js?v=4.2';
+import { weekdayOf } from '../calendar.js?v=4.2';
 
 // 段の順番。rules が '*hard' / '*soft' の段は、ほかの段に入らない決まりをまとめる
 export const STAGES = [
@@ -17,6 +17,7 @@ const OWN_STAGE = new Set(['sixPlus', 'shortage', 'offShort', 'overStreak']);
 // 式で縛るので段に入れない決まり／1分で作るの式に入れない決まり
 const NOT_IN_STAGES = new Set(['notAssigned', 'dailySkill', 'nightNext', 'requestDiff', 'leaderRank']);
 const SPARE_WEIGHT = 0.5;
+const CHANGE_WEIGHT = 0.001;
 
 // 1次の式：変数の名前 → 係数 と、定数
 class Lin {
@@ -68,7 +69,9 @@ function fixedCellOf(data, pid, day) {
   return undefined;
 }
 
-export function buildModel(data, { leaderWeight = 0 } = {}) {
+// keepCurrent：エラーを自動で直す（4-2）ときだけ。いまの表の値から変わるマスを数え、「できれば」の段で少しだけ減らす
+// changeLimit：そのとき、変わるマスの数の上限（null なら上限なし）
+export function buildModel(data, { leaderWeight = 0, keepCurrent = false, changeLimit = null } = {}) {
   const N = monthDays(data);
   const { year, month } = data.month;
   const work = data.settings.work;
@@ -149,6 +152,27 @@ export function buildModel(data, { leaderWeight = 0 } = {}) {
       }
       cells.set(key(p.id, d), c);
     }
+  }
+
+  // ---------- 変わるマスの数（4-2） ----------
+  // 決まっていないマスのうち、いまの値のままのマスの数 ≧ 決まっていないマスの数 − 上限。
+  // いまの値の変数が無いマス（担当外のシフト・日ごとに要るスキルの無い人のシフト・空き・半休）は、必ず変わる数に入る。
+  // 変わるマスの数は「できれば」の段にとても小さい重みで足す（良くならない入れかえをしないため。できれば 1件 ＝ 1000 マス）
+  if (keepCurrent) {
+    const keep = new Lin();
+    let free = 0;
+    for (const p of data.staff) {
+      for (let d = 1; d <= N; d += 1) {
+        const c = cells.get(key(p.id, d));
+        if (c.fixed !== undefined) continue;
+        free += 1;
+        const v = cellOf(data, p.id, d);
+        if (v?.kind === 'shift') keep.add(c.x.get(v.shift) ?? null);
+        else if (v && c[v.kind]) keep.add(c[v.kind]);
+      }
+    }
+    if (changeLimit !== null) con(keep, '>=', free - changeLimit);
+    addPen('_change', lin(free).add(keep, -1), CHANGE_WEIGHT);
   }
 
   // 状態の式（決まっているマスは定数）
@@ -401,6 +425,7 @@ export function buildModel(data, { leaderWeight = 0 } = {}) {
     const list = Object.keys(pen).filter((r) => !r.startsWith('_') && !NOT_IN_STAGES.has(r) && S(r) === want && !(want === 'hard' && OWN_STAGE.has(r)));
     if (want === 'soft') {
       list.push('_spare');
+      if (pen._change) list.push('_change');
       if (leaderWeight > 0) list.push('_leader');
     }
     return list;

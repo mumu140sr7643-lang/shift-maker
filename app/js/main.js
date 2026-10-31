@@ -1,20 +1,20 @@
 // 起動と、画面の切り替え。
-import { app, setRenderers } from './state.js?v=4.1';
-import { loadData, brokenCopy, getPref, setPref, KEYS, parseData } from './storage.js?v=4.1';
-import { APP_VERSION } from './version.js?v=4.1';
-import { h, clear } from './dom.js?v=4.1';
-import { notify, clearNotices } from './dialog.js?v=4.1';
-import { exportRaw } from './files.js?v=4.1';
-import { monthLabel, timeLabel } from './calendar.js?v=4.1';
-import { renderWelcome } from './screens/welcome.js?v=4.1';
-import { renderStep1 } from './screens/step1.js?v=4.1';
-import { renderStep2 } from './screens/step2.js?v=4.1';
-import { renderStep3 } from './screens/step3.js?v=4.1';
-import { renderStep4 } from './screens/step4.js?v=4.1';
-import { renderStep5 } from './screens/step5.js?v=4.1';
-import { renderStep6 } from './screens/step6.js?v=4.1';
-import { openDataPanel } from './screens/datapanel.js?v=4.1';
-import { clearHistory } from './history.js?v=4.1';
+import { app, setRenderers } from './state.js?v=4.2';
+import { loadData, brokenCopy, getPref, setPref, KEYS, parseData } from './storage.js?v=4.2';
+import { APP_VERSION } from './version.js?v=4.2';
+import { h, clear } from './dom.js?v=4.2';
+import { notify, clearNotices } from './dialog.js?v=4.2';
+import { exportRaw } from './files.js?v=4.2';
+import { monthLabel, timeLabel } from './calendar.js?v=4.2';
+import { renderWelcome } from './screens/welcome.js?v=4.2';
+import { renderStep1 } from './screens/step1.js?v=4.2';
+import { renderStep2 } from './screens/step2.js?v=4.2';
+import { renderStep3 } from './screens/step3.js?v=4.2';
+import { renderStep4 } from './screens/step4.js?v=4.2';
+import { renderStep5 } from './screens/step5.js?v=4.2';
+import { renderStep6 } from './screens/step6.js?v=4.2';
+import { openDataPanel } from './screens/datapanel.js?v=4.2';
+import { clearHistory } from './history.js?v=4.2';
 
 const STEPS = [
   { n: 1, title: '基本設定', render: renderStep1 },

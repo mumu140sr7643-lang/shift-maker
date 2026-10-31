@@ -653,6 +653,24 @@ button.band-item { cursor: pointer; }
 .pick-swap > summary { cursor: pointer; font-weight: 600; }
 .pick-swap .pick-grid { margin-top: 8px; }
 
+/* 手順6 エラーを自動で直す・途中から作り直す */
+.band-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 12px; }
+.band-actions .help { margin: 0; }
+.more-ops { position: relative; }
+.more-ops > summary { list-style: none; display: inline-flex; align-items: center; }
+.more-ops > summary::-webkit-details-marker { display: none; }
+.more-ops-menu { margin-top: 6px; padding: 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); max-width: 320px; }
+.more-ops-menu .help { margin: 6px 0 0; }
+.grid-cell.is-proposed { outline: 3px dotted var(--primary); outline-offset: -4px; }
+.repair-preview { margin: 0 0 12px; padding: 12px; border-radius: 8px; border-left: 5px solid var(--primary); background: var(--info-bg); color: var(--info-text); }
+.repair-preview h2 { margin: 0 0 4px; font-size: 1.1rem; }
+.repair-preview .help { color: var(--info-text); }
+.repair-changes { margin: 4px 0 8px; padding-left: 1.2em; }
+.repair-list { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 8px; }
+.repair-item { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+.repair-item h3 { margin: 0 0 4px; }
+.repair-item p { margin: 0 0 6px; }
+
 /* 手順5 自動で作る */
 .modes { display: grid; gap: 8px; }
 .mode { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); cursor: pointer; }

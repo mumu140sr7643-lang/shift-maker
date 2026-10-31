@@ -1,8 +1,8 @@
 // 決まりの検査と、良し悪しの比べ方（docs/数え方の表.md の 2 章・3 章）。
 // 画面には触らない。ブラウザでも node（tools/count.mjs）でも同じものを使う。
-import { RULES, strengthOf, cellTraits, isRestKind } from './rules.js?v=4.1';
-import { monthDays, shiftById, rankOrder, needOn, cellOf, cellName } from './model.js?v=4.1';
-import { weekdayOf } from './calendar.js?v=4.1';
+import { RULES, strengthOf, cellTraits, isRestKind } from './rules.js?v=4.2';
+import { monthDays, shiftById, rankOrder, needOn, cellOf, cellName } from './model.js?v=4.2';
+import { weekdayOf } from './calendar.js?v=4.2';
 
 const GROUP_IDS = ['early', 'late', 'night'];
 
@@ -331,7 +331,8 @@ export function requestConflicts(data) {
 
 // 自動で作るときに、値が決まっているマス（希望と、手で固定したマス）を集める。
 // 返す：{ fixed（空きのまま固定したマスは入れない）, emptyLocks: [[人, 日]], extra（固定と希望が違うマス・夜勤の次の日が空きのまま固定） }
-function fixedCells(data) {
+// lockedName：固定したマスの呼び名（途中から作り直すでは「いまのまま残すマス」）
+function fixedCells(data, { lockedName = '固定したマス' } = {}) {
   const fixed = {};
   const emptyLocks = [];
   const extra = [];
@@ -351,7 +352,7 @@ function fixedCells(data) {
         continue;
       }
       if (r && (r.kind !== v.kind || (r.kind === 'shift' && r.shift !== v.shift))) {
-        extra.push({ rule: 'requestDiff', strength: 'hard', staff: pid, day: Number(day), text: `${p?.name || '名前なし'}さんの${md(day)}は、固定したマスが「${cellName(data, v)}」で、希望の「${cellName(data, r)}」と違います` });
+        extra.push({ rule: 'requestDiff', strength: 'hard', staff: pid, day: Number(day), text: `${p?.name || '名前なし'}さんの${md(day)}は、${lockedName}が「${cellName(data, v)}」で、希望の「${cellName(data, r)}」と違います` });
       }
       (fixed[pid] ??= {})[day] = { ...v };
     }
@@ -360,7 +361,7 @@ function fixedCells(data) {
     const prev = day === 1 ? null : fixed[pid]?.[day - 1];
     const p = data.staff.find((x) => x.id === pid);
     const prevNight = day === 1 ? Boolean(p?.prevLastShift && shiftById(data, p.prevLastShift)?.night) : prev?.kind === 'shift' && Boolean(shiftById(data, prev.shift)?.night);
-    if (prevNight) extra.push({ rule: 'nightNext', strength: 'hard', staff: pid, day, text: `${p?.name || '名前なし'}さんの${md(day)}は、夜勤の次の日ですが、空きのまま固定されています` });
+    if (prevNight) extra.push({ rule: 'nightNext', strength: 'hard', staff: pid, day, text: `${p?.name || '名前なし'}さんの${md(day)}は、夜勤の次の日ですが、${lockedName === '固定したマス' ? '空きのまま固定されています' : `空きの${lockedName}です`}` });
   }
   return { fixed, emptyLocks, extra };
 }
@@ -368,8 +369,8 @@ function fixedCells(data) {
 // 自動で作る前に止めるもの：式で縛っているので、あると答えが無くなる（または必ず残る）もの。
 // 6連勤以上・連勤超過・遅い→早い・2連休は、式では量を最小にするだけなので止めない（unavoidableErrors で知らせる）
 const BLOCKING = new Set(['notAssigned', 'dailySkill', 'nightNext', 'requestDiff']);
-export function solveConflicts(data) {
-  const { fixed, extra } = fixedCells(data);
+export function solveConflicts(data, opts = {}) {
+  const { fixed, extra } = fixedCells(data, opts);
   return [...extra, ...conflictsOf(data, fixed).filter((it) => BLOCKING.has(it.rule))];
 }
 

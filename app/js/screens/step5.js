@@ -1,29 +1,20 @@
 // 手順5 自動で作る：1分で作る（おためし）。計算は裏方（solver/worker.js の Web Worker）で行うので、画面は固まらない。
 // 計算は写しで行い、終わってから、そのあいだにデータが変わっていないことを確かめて本物の表に入れる。
-import { h, append } from '../dom.js?v=4.1';
-import { app, rerender, goStep } from '../state.js?v=4.1';
-import { record, undo, nextUndo } from '../history.js?v=4.1';
-import { canonicalJSON, clone, applyGenerated } from '../model.js?v=4.1';
-import { checkTable, solveConflicts, unavoidableErrors } from '../check.js?v=4.1';
-import { RULE_BY_ID } from '../rules.js?v=4.1';
-import { ask, notify } from '../dialog.js?v=4.1';
-import { takeBackup, backupLines } from '../backup.js?v=4.1';
-import { timeLabel } from '../calendar.js?v=4.1';
-import { screenTitle } from './common.js?v=4.1';
-import { countBand } from './checkview.js?v=4.1';
+import { h, append } from '../dom.js?v=4.2';
+import { app, rerender, goStep } from '../state.js?v=4.2';
+import { record, undo, nextUndo } from '../history.js?v=4.2';
+import { canonicalJSON, clone, applyGenerated } from '../model.js?v=4.2';
+import { checkTable, solveConflicts, unavoidableErrors } from '../check.js?v=4.2';
+import { RULE_BY_ID } from '../rules.js?v=4.2';
+import { ask, notify } from '../dialog.js?v=4.2';
+import { takeBackup, backupLines } from '../backup.js?v=4.2';
+import { timeLabel } from '../calendar.js?v=4.2';
+import { screenTitle } from './common.js?v=4.2';
+import { countBand } from './checkview.js?v=4.2';
+import { startSolving, isSolving, quickSeconds } from './solving.js?v=4.2';
 
-const QUICK_SECONDS = 60;
 // 元に戻すの履歴での呼び名（手順6 の「元に戻す」にも出る）
 const GENERATED_LABEL = '自動で作った表';
-
-// 1分で作るの秒。確かめの道具だけが、アドレスの ?seconds=5 のように短くする（3〜60秒）
-function quickSeconds() {
-  const n = Number(new URLSearchParams(window.location.search).get('seconds'));
-  return Number.isInteger(n) && n >= 3 && n <= QUICK_SECONDS ? n : QUICK_SECONDS;
-}
-
-// 計算中の仕事（画面を作り直しても残す）
-let job = null;
 
 const hasCells = (d) => Object.values(d.month.table).some((row) => Object.keys(row).length > 0);
 const ruleLine = (it) => `${RULE_BY_ID[it.rule]?.name ?? it.rule}：${it.text}`;
@@ -36,38 +27,6 @@ function basicProblems(d) {
   return out;
 }
 
-function stopJob() {
-  if (!job) return;
-  job.worker.terminate();
-  clearInterval(job.timer);
-  job.dialog.close();
-  job.dialog.remove();
-  job = null;
-}
-
-function progressDialog(seconds, onStop) {
-  const stage = h('p', { class: 'run-stage', testid: 'run-stage', text: 'はじめの段を用意しています' });
-  const bar = h('progress', { class: 'run-bar', max: String(seconds), value: '0', testid: 'run-progress', 'aria-label': 'たった時間' });
-  const time = h('p', { class: 'run-time', testid: 'run-time', text: `0秒たちました（あと最大${seconds}秒）` });
-  const best = h('p', { class: 'run-best', testid: 'run-best', text: 'いまのいちばん良い答え：まだありません（はじめの段を解いています）' });
-  const dlg = h(
-    'dialog',
-    { class: 'dialog run-dialog', testid: 'run-dialog', 'aria-labelledby': 'run-title' },
-    h('h2', { id: 'run-title', text: 'シフトを作っています' }),
-    stage,
-    bar,
-    time,
-    best,
-    h('p', { class: 'help', text: '作っているあいだは、入力・手順の移動・月の切り替え・取り込みを止めています（作っている途中の表とぶつからないようにするため）。止めたいときは「中止」を押してください。表は前のままになります。' }),
-    h('div', { class: 'dialog-buttons' }, h('button', { type: 'button', class: 'btn btn-danger', text: '中止', testid: 'run-stop', on: { click: onStop } })),
-  );
-  // Esc では閉じない（中止は「中止」で）
-  dlg.addEventListener('cancel', (e) => e.preventDefault());
-  document.body.appendChild(dlg);
-  dlg.showModal();
-  return { dlg, stage, bar, time, best };
-}
-
 function failText(reason, conflicts) {
   if (reason === 'conflict') return `このままでは作れません。${conflicts.slice(0, 3).map(ruleLine).join(' ／ ')}。手順5 の「作る前の確かめ」を見て直してください。シフト表は前のままです。`;
   if (reason === 'infeasible') return '条件どうしがぶつかって作れませんでした。シフト表は前のままです。手順4 の希望と、手順6 で固定したマスを見直してください。';
@@ -78,79 +37,42 @@ function run(d) {
   const seconds = quickSeconds();
   const startText = canonicalJSON(d);
   const seed = (d.month.runs.length % 1000) + 1;
-  let worker;
-  try {
-    worker = new Worker(new URL('../solver/worker.js?v=4.1', import.meta.url), { type: 'module' });
-  } catch {
-    notify('計算の部品を動かせませんでした。ページを読み込み直して、もう一度ためしてください。', { kind: 'error', testid: 'run-error' });
-    return;
-  }
-  const ui = progressDialog(seconds, () => {
-    stopJob();
-    notify('中止しました。シフト表は前のままです。', { testid: 'run-stopped' });
-    rerender();
-  });
-  const t0 = performance.now();
-  const tick = () => {
-    const el = Math.min(seconds, (performance.now() - t0) / 1000);
-    ui.bar.value = el;
-    ui.time.textContent = `${Math.floor(el)}秒たちました（あと最大${Math.max(0, Math.ceil(seconds - el))}秒）`;
-  };
-  job = { worker, dialog: ui.dlg, timer: setInterval(tick, 250) };
-  worker.onmessage = (e) => {
-    const m = e.data;
-    if (m.type === 'progress') {
-      if (m.phase === 'start') ui.stage.textContent = `いまの段：${m.stage}/${m.count}（${m.name}）`;
-      if (m.totals) {
-        ui.best.textContent = `いまのいちばん良い答え：6連勤以上 ${m.totals.sixPlus}件・絶対 ${m.totals.hard}件・できれば ${m.totals.soft}件`;
-        ui.best.dataset.hard = String(m.totals.hard);
+  startSolving({
+    payload: { kind: 'generate', data: clone(d), timeLimit: seconds, seed },
+    seconds,
+    title: 'シフトを作っています',
+    onResult: (r) => {
+      if (!r.ok) {
+        notify(failText(r.reason, r.conflicts), { kind: 'error', testid: 'run-failed' });
+        rerender();
+        return;
       }
-      return;
-    }
-    stopJob();
-    if (m.type === 'error') {
-      notify(`計算の部品が止まりました（${m.message}）。シフト表は前のままです。ページを読み込み直して、もう一度ためしてください。`, { kind: 'error', testid: 'run-error' });
-      rerender();
-      return;
-    }
-    const r = m.result;
-    if (!r.ok) {
-      notify(failText(r.reason, r.conflicts), { kind: 'error', testid: 'run-failed' });
-      rerender();
-      return;
-    }
-    // 計算のあいだに、別のタブ（画面）でデータが変わっていたら、そちらを守って入れない
-    if (canonicalJSON(app.data) !== startText) {
-      notify('計算のあいだに、別のタブ（画面）でデータが変わりました。そちらの内容を守るため、作った表は入れませんでした。もう一度「シフトを作る」を押してください。', { kind: 'warn', testid: 'run-changed' });
-      rerender();
-      return;
-    }
-    const run = {
-      at: new Date().toISOString(),
-      mode: 'quick',
-      limit: seconds,
-      seed,
-      seconds: r.seconds,
-      finished: r.stages.length > 0 && r.stages.every((s) => s.status === 'solved'),
-      stages: r.stages.map((s) => ({ key: s.key, name: s.name, status: s.status, seconds: s.seconds })),
-    };
-    record(GENERATED_LABEL, (x) => {
-      applyGenerated(x, r.table, run);
-      run.totals = checkTable(x).totals;
-    }, { render: true });
-    notify('シフト表を作りました。下の「作った結果」と、手順6 シフト表で見られます。', { kind: 'ok', testid: 'run-done' });
-  };
-  worker.onerror = (e) => {
-    e.preventDefault();
-    stopJob();
-    notify('計算の部品を読み込めませんでした。シフト表は前のままです。ページを読み込み直して、もう一度ためしてください。', { kind: 'error', testid: 'run-error' });
-    rerender();
-  };
-  worker.postMessage({ data: clone(d), timeLimit: seconds, seed });
+      // 計算のあいだに、別のタブ（画面）でデータが変わっていたら、そちらを守って入れない
+      if (canonicalJSON(app.data) !== startText) {
+        notify('計算のあいだに、別のタブ（画面）でデータが変わりました。そちらの内容を守るため、作った表は入れませんでした。もう一度「シフトを作る」を押してください。', { kind: 'warn', testid: 'run-changed' });
+        rerender();
+        return;
+      }
+      const run = {
+        at: new Date().toISOString(),
+        mode: 'quick',
+        limit: seconds,
+        seed,
+        seconds: r.seconds,
+        finished: r.stages.length > 0 && r.stages.every((s) => s.status === 'solved'),
+        stages: r.stages.map((s) => ({ key: s.key, name: s.name, status: s.status, seconds: s.seconds })),
+      };
+      record(GENERATED_LABEL, (x) => {
+        applyGenerated(x, r.table, run);
+        run.totals = checkTable(x).totals;
+      }, { render: true });
+      notify('シフト表を作りました。下の「作った結果」と、手順6 シフト表で見られます。', { kind: 'ok', testid: 'run-done' });
+    },
+  });
 }
 
 async function start() {
-  if (job) return;
+  if (isSolving()) return;
   const d = app.data;
   if (basicProblems(d).length || solveConflicts(d).length) {
     rerender();
@@ -275,7 +197,7 @@ function resultCard(d) {
     'section',
     { class: 'card', testid: 'run-result', dataset: { finished: String(Boolean(r.finished)) } },
     h('h2', { text: '作った結果' }),
-    h('p', { testid: 'run-when', text: `${when}「1分で作る」で作りました（${Math.round(Number(r.seconds) || 0)}秒）。` }),
+    h('p', { testid: 'run-when', text: `${when}${r.mode === 'restart' ? `「途中から作り直す」（${Number(r.fromDay) || ''}日から）` : '「1分で作る」'}で作りました（${Math.round(Number(r.seconds) || 0)}秒）。` }),
     h('p', { testid: 'run-status', text: status }),
     h('h3', { text: 'いまのシフト表の件数' }),
     countBand(res),

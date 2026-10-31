@@ -16,6 +16,8 @@ import * as R from '../app/js/rules.js';
 import { solveStaged } from '../app/js/solver/stages.js';
 import highsLoader from '../vendor/highs/highs.mjs';
 import { snapshotOf, diffSnapshots, applyChanges } from '../app/js/undo.js';
+import { prepareRepair, prepareRestart, solveRepair, tableChanges } from '../app/js/solver/repair.js';
+import { checkProposal } from './repair.mjs';
 
 const results = [];
 const check = (name, problems) => results.push({ name, problems });
@@ -632,6 +634,47 @@ const check = (name, problems) => results.push({ name, problems });
   const before3 = M.canonicalJSON(d3);
   if (M.swapCells(d3, p.id, q.id, 12).ok || M.canonicalJSON(d3) !== before3) problems.push('固定したマスを入れ替えた');
   check('元に戻す・やり直す（変えた所だけ・いまもその値の所だけ）と入れ替え', problems);
+}
+
+// 16. エラーを自動で直す・途中から作り直す（repair.js）（4-2）
+{
+  const problems = [];
+  const d = await makeSample({ seed: 9, staff: 10, withTable: true });
+  d.month.marks = {}; // 作り物の月の固定には、希望とぶつかるものがあるので外す
+  const [p0, p1, p2] = d.staff;
+  // 式の決まりを破っているマス：担当外のシフト・希望と違うマス
+  const outside = d.settings.shifts.find((x) => !p0.shifts.includes(x.id));
+  if (outside) d.month.table[p0.id] = { ...(d.month.table[p0.id] ?? {}), 4: { kind: 'shift', shift: outside.id } };
+  d.month.requests[p1.id] = { ...(d.month.requests[p1.id] ?? {}), 6: { kind: 'paid' } };
+  d.month.table[p1.id] = { ...(d.month.table[p1.id] ?? {}), 6: { kind: 'off' } };
+  // 空き・半休・固定
+  d.month.table[p2.id] = { ...(d.month.table[p2.id] ?? {}), 7: { kind: 'off' }, 9: { kind: 'half' } };
+  delete d.month.table[p2.id][8];
+  d.month.marks[p2.id] = { ...(d.month.marks[p2.id] ?? {}), 10: { locked: true } };
+  delete d.month.requests[p2.id];
+  const base = prepareRepair(d);
+  if (base.requestDiffs < 1) problems.push('希望と違うマスを数えない');
+  if (outside && base.noVar < 1) problems.push('担当外のシフトのマスを、必ず変わるマスに数えない');
+  if (!base.prepared.month.marks[p2.id]?.[8]?.locked || !base.prepared.month.marks[p2.id]?.[9]?.locked) problems.push('空き・半休のマスを、写しで残さない');
+  if (d.month.marks[p2.id]?.[8]) problems.push('本物のデータに固定の印を付けた');
+  const known = base.requestDiffs + base.noVar;
+  const res = await solveRepair(d, { loadHighs: () => highsLoader(), budgets: [known - 1, 40, null], nodeLimit: 5, secondsEach: null });
+  if (!res.ok) problems.push(`直す案を作れない（${res.reason}）`);
+  else {
+    if (res.proposals[0].status !== 'too-many') problems.push('必ず変えるマスより小さい上限で、「この上限では直せません」にならない');
+    for (const pr of res.proposals.filter((x) => x.status === 'ok')) {
+      const bad = checkProposal(d, pr);
+      if (bad.length) problems.push(`上限 ${pr.budget ?? '全部'} の案：${bad.slice(0, 2).join(' / ')}`);
+      if (tableChanges(d, pr.table).length !== pr.changes.length) problems.push('変わるマスの数が合わない');
+    }
+  }
+  // 途中から作り直す：選んだ日より前は、写しで固定（空きも）。本物には印を付けない
+  const r = prepareRestart(d, 11);
+  if (!d.staff.every((p) => [1, 5, 10].every((day) => r.month.marks[p.id]?.[day]?.locked)) || r.month.marks[p0.id]?.[11]?.locked) problems.push('途中から作り直すの写しで、選んだ日より前だけを固定にしていない');
+  const blockers = C.solveConflicts(r, { lockedName: 'いまのまま残すマス' });
+  if (outside && !blockers.some((it) => it.rule === 'notAssigned')) problems.push('残す日に担当外のシフトがあるのに、作る前に止めない');
+  if (blockers.some((it) => it.rule === 'requestDiff' && !it.text.includes('いまのまま残すマス'))) problems.push('残すマスのぶつかりの文が「固定したマス」のまま');
+  check('エラーを自動で直す・途中から作り直す（上限・残すマス・止める）', problems);
 }
 
 // 10. 言葉の確かめ：一覧の言葉が、リポジトリのファイル・コミットの文に入っていないか

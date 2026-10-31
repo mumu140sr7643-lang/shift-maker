@@ -854,5 +854,109 @@
  {
   "id": "run-undone",
   "find": "run-undone"
+ },
+ {
+  "id": "repair",
+  "find": "repair"
+ },
+ {
+  "id": "repair-why",
+  "find": "repair-why"
+ },
+ {
+  "id": "repair-confirm",
+  "find": "repair-confirm"
+ },
+ {
+  "id": "repair-start",
+  "find": "repair-start"
+ },
+ {
+  "id": "repair-cancel-start",
+  "find": "repair-cancel-start"
+ },
+ {
+  "id": "repair-results",
+  "find": "repair-results"
+ },
+ {
+  "id": "repair-item",
+  "find": "repair-item"
+ },
+ {
+  "id": "repair-view",
+  "find": "repair-view"
+ },
+ {
+  "id": "repair-none",
+  "find": "repair-none"
+ },
+ {
+  "id": "repair-results-close",
+  "find": "repair-results-close"
+ },
+ {
+  "id": "repair-preview",
+  "find": "repair-preview"
+ },
+ {
+  "id": "repair-changes",
+  "find": "repair-changes"
+ },
+ {
+  "id": "repair-apply",
+  "find": "repair-apply"
+ },
+ {
+  "id": "repair-back",
+  "find": "repair-back"
+ },
+ {
+  "id": "repair-cancel",
+  "find": "repair-cancel"
+ },
+ {
+  "id": "repair-done",
+  "find": "repair-done"
+ },
+ {
+  "id": "repair-stale",
+  "find": "repair-stale"
+ },
+ {
+  "id": "repair-blocked",
+  "find": "repair-blocked"
+ },
+ {
+  "id": "preview-notice",
+  "find": "preview-notice"
+ },
+ {
+  "id": "more-ops",
+  "find": "more-ops"
+ },
+ {
+  "id": "restart",
+  "find": "restart"
+ },
+ {
+  "id": "restart-day",
+  "find": "restart-day"
+ },
+ {
+  "id": "restart-dialog",
+  "find": "restart-dialog"
+ },
+ {
+  "id": "restart-blocked",
+  "find": "restart-blocked"
+ },
+ {
+  "id": "restart-done",
+  "find": "restart-done"
+ },
+ {
+  "id": "restart-failed",
+  "find": "restart-failed"
  }
 ]

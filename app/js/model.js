@@ -1,6 +1,6 @@
 // データの形と、データを作る・確かめる・直す関数。
 // 画面（DOM）には触らない。ブラウザでも node（確かめの道具）でも同じものを使う。
-import { daysInMonth, weekdayOf } from './calendar.js?v=4.1';
+import { daysInMonth, weekdayOf } from './calendar.js?v=4.2';
 
 // データの形の版。形を変えたら 1 つ上げ、migrate() に古い形を直す手順を足す。
 export const FORMAT_VERSION = 1;
@@ -362,13 +362,26 @@ export function swapCells(data, pidA, pidB, day) {
 // 自動で作った表を入れる。固定したマスの印は残し、「手で変えた」の印は消す（新しい表なので）。
 // 作った記録（run）を month.runs に足し、新しい MAX_RUNS 回ぶんまで残す
 export const MAX_RUNS = 20;
+export function addRun(data, run) {
+  data.month.runs.push(run);
+  if (data.month.runs.length > MAX_RUNS) data.month.runs.splice(0, data.month.runs.length - MAX_RUNS);
+}
+
 export function applyGenerated(data, table, run) {
   data.month.table = table;
   for (const [pid, days] of Object.entries(data.month.marks)) {
     for (const day of Object.keys(days)) setMark(data, pid, Number(day), 'edited', false);
   }
-  data.month.runs.push(run);
-  if (data.month.runs.length > MAX_RUNS) data.month.runs.splice(0, data.month.runs.length - MAX_RUNS);
+  addRun(data, run);
+}
+
+// 自動で直した案・途中から作り直した表の、変わるマスだけを入れる（4-2）。
+// 変わったマスの「手で変えた」の印は外す（自動で変えたので）。changes: [{ pid, day, after }]
+export function applyCellChanges(data, changes) {
+  for (const ch of changes) {
+    writeCell(data.month.table, ch.pid, ch.day, cellValue(ch.after));
+    setMark(data, ch.pid, ch.day, 'edited', false);
+  }
 }
 
 // 表のマスを手で変える。

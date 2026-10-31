@@ -1,18 +1,20 @@
 // 手順6 シフト表。マスを押すと、入れるものを選ぶ小窓が出る。変えるたびに決まりを検査し直し、印・件数の帯・一覧を直す。
 // 変えた所は履歴（history.js）に積み、「元に戻す」「やり直す」で戻せる。同じ日の2人のマスは、ドラッグか小窓で入れ替えられる。
-import { h, append } from '../dom.js?v=4.1';
-import { app } from '../state.js?v=4.1';
+// 「エラーを自動で直す」の案を見ているあいだは、表を案の表に切りかえて見せる（repairview.js）。
+import { h, append } from '../dom.js?v=4.2';
+import { app } from '../state.js?v=4.2';
 import {
   REST_KINDS, shiftById, cellOf, marksOf, requestOf, setCellByHand, setLock, swapCells, cellSymbol, cellName,
-} from '../model.js?v=4.1';
-import { record, undo, redo, nextUndo, nextRedo } from '../history.js?v=4.1';
-import { weekdayOf, WEEKDAY_LABELS } from '../calendar.js?v=4.1';
-import { notify } from '../dialog.js?v=4.1';
-import { checkTable } from '../check.js?v=4.1';
-import { screenTitle } from './common.js?v=4.1';
-import { staffGrid } from './staffgrid.js?v=4.1';
-import { needGrid } from './needgrid.js?v=4.1';
-import { markIndex, markClasses, markBadges, countBand, errorList, worsened } from './checkview.js?v=4.1';
+} from '../model.js?v=4.2';
+import { record, undo, redo, nextUndo, nextRedo } from '../history.js?v=4.2';
+import { weekdayOf, WEEKDAY_LABELS } from '../calendar.js?v=4.2';
+import { notify } from '../dialog.js?v=4.2';
+import { checkTable } from '../check.js?v=4.2';
+import { screenTitle } from './common.js?v=4.2';
+import { staffGrid } from './staffgrid.js?v=4.2';
+import { needGrid } from './needgrid.js?v=4.2';
+import { markIndex, markClasses, markBadges, countBand, errorList, worsened } from './checkview.js?v=4.2';
+import { currentPreview, previewCard, openRepair, openRestart, repairBlockReason } from './repairview.js?v=4.2';
 
 const SVG = 'http://www.w3.org/2000/svg';
 const NL = String.fromCharCode(10); // マウスを置いたときの文の改行
@@ -31,7 +33,8 @@ function lockIcon() {
   return svg;
 }
 
-function tableCell(d, p, day, marks) {
+// changed：案で変わるマス（`人|日`）の集まり。案を見ているときだけ
+function tableCell(d, p, day, marks, changed = null) {
   const v = cellOf(d, p.id, day);
   const mk = marks.get(`c|${p.id}|${day}`);
   const m = marksOf(d, p.id, day);
@@ -46,9 +49,12 @@ function tableCell(d, p, day, marks) {
   }
   if (m.locked) cls.push('is-locked');
   if (m.edited) cls.push('is-edited');
+  const proposed = Boolean(changed?.has(`${p.id}|${day}`));
+  if (proposed) cls.push('is-proposed');
   cls.push(...markClasses(mk));
   const label = [
     cellName(d, v),
+    proposed ? '案で変わるマス' : null,
     m.locked ? '固定' : null,
     m.edited ? '作ったあとに手で変えた' : null,
     req ? `希望は${cellName(d, req)}` : null,
@@ -104,6 +110,11 @@ function openPicker(p, day, changed, returnFocus) {
     returnFocus.focus();
   };
   const choose = (value) => {
+    // いまと同じものなら何もしない（「手で変えた」の印も履歴も付けない。2026-10-31 確かめ役と決めた）
+    if (same(now, value)) {
+      close();
+      return;
+    }
     let next = null;
     record(`${who(p)}の${month}月${day}日`, (x) => { next = setCellByHand(x, p.id, day, value); });
     close();
@@ -267,8 +278,12 @@ export function renderStep6(el) {
     append(el, h('p', { class: 'empty', testid: 'table-empty', text: 'スタッフがいません。手順3 スタッフで、1人以上入れてください。' }));
     return;
   }
-  let result = checkTable(d);
-  let marks = markIndex(d, result);
+  // 案を見ているときは、案の表で見せる（本物のデータは変えない）
+  const pv = currentPreview();
+  const view = pv ? { ...d, month: { ...d.month, table: pv.proposal.table } } : d;
+  const changed = pv ? new Set(pv.proposal.changes.map((c) => `${c.pid}|${c.day}`)) : null;
+  let result = checkTable(view);
+  let marks = markIndex(view, result);
   const tools = h('div', { class: 'table-tools', testid: 'table-tools' });
   const bandBox = h('div', { class: 'band-box' });
   const detailBox = h('div', { class: 'band-detail card', testid: 'band-detail', hidden: true });
@@ -279,8 +294,8 @@ export function renderStep6(el) {
   // 元に戻す・やり直す（押すと画面を作り直す）
   const drawTools = () => {
     tools.textContent = '';
-    const u = nextUndo();
-    const r = nextRedo();
+    const u = pv ? null : nextUndo();
+    const r = pv ? null : nextRedo();
     append(
       tools,
       h(
@@ -288,8 +303,19 @@ export function renderStep6(el) {
         { class: 'row-actions' },
         h('button', { type: 'button', class: 'btn', testid: 'undo', text: '元に戻す', disabled: !u, on: { click: () => tellUndo(undo(), '元に戻し') } }),
         h('button', { type: 'button', class: 'btn', testid: 'redo', text: 'やり直す', disabled: !r, on: { click: () => tellUndo(redo(), 'やり直し') } }),
+        h(
+          'details',
+          { class: 'more-ops', testid: 'more-ops' },
+          h('summary', { class: 'btn', text: 'その他の操作' }),
+          h(
+            'div',
+            { class: 'more-ops-menu' },
+            h('button', { type: 'button', class: 'btn', testid: 'restart', text: '途中から作り直す', disabled: Boolean(pv) || !d.settings.shifts.length, on: { click: openRestart } }),
+            h('p', { class: 'help', text: pv ? '案を見ているあいだは使えません。' : '◯日までをいまのまま残して、あとの日を作り直します。' }),
+          ),
+        ),
       ),
-      h('p', { class: 'help', testid: 'undo-status', text: u ? `「元に戻す」で、「${u.label}」の前に戻ります。` : '戻せる変更はまだありません（このページを開いてから変えたものを戻せます。読み直すと消えます）。' }),
+      h('p', { class: 'help', testid: 'undo-status', text: pv ? '案を見ているあいだは、元に戻す・やり直すを止めています。' : u ? `「元に戻す」で、「${u.label}」の前に戻ります。` : '戻せる変更はまだありません（このページを開いてから変えたものを戻せます。読み直すと消えます）。' }),
       r ? h('p', { class: 'help', testid: 'redo-status', text: `「やり直す」で、「${r.label}」をもう一度します。` }) : null,
     );
   };
@@ -311,7 +337,16 @@ export function renderStep6(el) {
   };
   const drawCheck = () => {
     bandBox.textContent = '';
-    bandBox.append(countBand(result, { onOpen: openDetail }));
+    const why = repairBlockReason(result);
+    bandBox.append(
+      countBand(result, { onOpen: openDetail }),
+      h(
+        'div',
+        { class: 'band-actions' },
+        h('button', { type: 'button', class: 'btn btn-primary', testid: 'repair', text: 'エラーを自動で直す', disabled: Boolean(why), on: { click: openRepair } }),
+        h('span', { class: 'help', testid: 'repair-why', text: why ?? '変えてよいマスの数を決めて、エラーが減る案を探します。' }),
+      ),
+    );
     listBox.textContent = '';
     const list = errorList(result, { onFocus: focusItem });
     if (list) listBox.append(h('h2', { text: 'エラーの一覧' }), h('p', { class: 'help', text: '押すと、そのマスへ動きます。' }), list);
@@ -340,20 +375,23 @@ export function renderStep6(el) {
     data: d,
     testid: 'shift-grid',
     cellTestid: 'table-cell',
-    cell: (p, day) => tableCell(d, p, day, marks),
-    onPick: (p, day, btn) => openPicker(p, day, recheck, btn),
-    onSwap: (pa, pb, day) => swapByHand(pa, pb, day, recheck),
+    cell: (p, day) => tableCell(view, p, day, marks, changed),
+    onPick: (p, day, btn) => (pv
+      ? notify('案を見ているあいだは、マスを変えられません。上の「この案にする」か「やめる」を押してください。', { kind: 'info', testid: 'preview-notice' })
+      : openPicker(p, day, recheck, btn)),
+    onSwap: pv ? null : (pa, pb, day) => swapByHand(pa, pb, day, recheck),
     rowMark: (p) => headMark(marks.get(`n|${p.id}`)),
     dayMark: (day) => headMark(marks.get(`d|${day}`)),
   });
   drawCheck();
   drawTools();
-  if (d.settings.shifts.length) need = needGrid({ assigned: assignedCounter(d), onChange: () => recheck(true) });
+  if (d.settings.shifts.length && !pv) need = needGrid({ assigned: assignedCounter(d), onChange: () => recheck(true) });
   append(
     el,
     h(
       'section',
       { class: 'card' },
+      previewCard(),
       tools,
       bandBox,
       detailBox,
@@ -370,6 +408,8 @@ export function renderStep6(el) {
           h('p', { class: 'help', text: '上の数は必要人数（手順2と同じ入れ方で変えられます）。下の「配置」は、シフト表で入れた人数です。' }),
           need.el,
         )
-      : null,
+      : pv
+        ? h('section', { class: 'card' }, h('h2', { text: '日ごとの必要人数と、配置した人数' }), h('p', { class: 'help', text: '案を見ているあいだは出していません。「この案にする」か「やめる」を押すと出ます。' }))
+        : null,
   );
 }

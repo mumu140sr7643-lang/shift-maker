@@ -1,6 +1,6 @@
 // 段階的に解く（docs/自動で作る案.md の 4・5 章）。HiGHS を読み込む関数を渡せば、ブラウザでも node でも同じに動く。
-import { buildModel } from './build.js?v=4.1';
-import { solveConflicts } from '../check.js?v=4.1';
+import { buildModel } from './build.js?v=4.2';
+import { solveConflicts } from '../check.js?v=4.2';
 
 // HiGHS の答えの状態の番号
 const OPTIMAL = 7;
@@ -65,11 +65,12 @@ function runLp(highs, text, options, start) {
 //   reason: 'conflict'（解く前のぶつかり）| 'infeasible'（答えが無い）| 'no-answer'（段1で上限までに答えが無い）| 'stopped'（中止）
 export async function solveStaged(data, opts) {
   // maxStages・presolve・presolveRuleOff・warmStart は確かめの道具だけが変える（はじめの段だけ解く・前処理の不具合を調べる）
-  const { loadHighs, timeLimit = null, nodeLimit = null, seed = 1, leaderWeight = 0, onProgress = () => {}, shouldStop = () => false, maxStages = Infinity, presolve = 'on', presolveRuleOff = PRESOLVE_RULE_OFF, warmStart = WARM_START, softWarmStart = SOFT_WARM_START, softOptions = SOFT_OPTIONS } = opts;
+  // keepCurrent・changeLimit はエラーを自動で直す（repair.js）だけが使う
+  const { loadHighs, timeLimit = null, nodeLimit = null, seed = 1, leaderWeight = 0, onProgress = () => {}, shouldStop = () => false, maxStages = Infinity, presolve = 'on', presolveRuleOff = PRESOLVE_RULE_OFF, warmStart = WARM_START, softWarmStart = SOFT_WARM_START, softOptions = SOFT_OPTIONS, keepCurrent = false, changeLimit = null } = opts;
   const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
   const conflicts = solveConflicts(data);
   if (conflicts.length) return { ok: false, reason: 'conflict', conflicts, stages: [] };
-  const model = buildModel(data, { leaderWeight });
+  const model = buildModel(data, { leaderWeight, keepCurrent, changeLimit });
   const records = [];
   const bounds = [];
   let last = null;

@@ -20,6 +20,7 @@
   - 検査の画面（空の表の案内・6連勤以上の印と「悪くなりました」・一覧から動く・配置した人数・件数の帯と印が tools/count.mjs と同じ）
   - 決まりの強さ（手順1のチェックと1つの値・強さで件数が移る）と、希望だけで必ずエラーになるものの知らせ
   - 保存データが読めないとき、控えを残して知らせるか
+  - エラーを自動で直す（上限ごとの案・表で見る・反映・元に戻す・必ず変えるマスが多い上限）と、途中から作り直す（残す日は同じ・元に戻せる・残す日に担当外があれば止める）
   - 元に戻す・やり直す（マス・入れ替え・必要人数・自動で作った表。1文字も同じに戻る・読み直すと履歴は消える）と、同じ日の2人の入れ替え（ドラッグ・小窓・固定は入れ替えない）
   - 自動で作る（中止で前のまま・計算中はほかを押せない・進み具合・件数の帯が check.js と同じ・置きかえる前の控えから戻る・記録 20 回まで・別のタブで変えたら上書きしない・作る前の確かめ）
 終わりに、結果を JSON で表示する。1 つでも失敗があれば、終わりのコードは 1。
@@ -1245,6 +1246,11 @@ def scenario_undo(browser, base):
     ok("元に戻しました" in t(page, "undo-notice").first.inner_text(), "「元に戻しました」と知らせる")
     t(page, "redo").click()
     ok(stored(page) == s1, "やり直すと、変えたあとと1文字も同じになる")
+    saved_at = page.evaluate("() => localStorage.getItem('shift-maker:saved-at')")
+    label = t(page, "undo-status").inner_text()
+    cell(0, 1).click()
+    page.locator(f'[data-testid="pick-option"][data-kind="shift"][data-shift="{sid}"]').click()
+    ok(stored(page) == s1 and t(page, "undo-status").inner_text() == label and page.evaluate("() => localStorage.getItem('shift-maker:saved-at')") == saved_at, "いまと同じものを選んでも、何も変えない（履歴にも保存の時刻にも入らない）")
 
     # 2. ドラッグで入れ替え（同じ日のほかの人のマス）→ 件数の帯が数え直される → 元に戻す
     sid2 = data["staff"][1]["shifts"][0]
@@ -1324,6 +1330,143 @@ def scenario_undo(browser, base):
     ctx.close()
 
 
+def scenario_repair(browser, base):
+    """4-2：エラーを自動で直す（案を並べる・表で見る・反映・元に戻す・必ず変えるマスが多い上限）と、途中から作り直す（残す日・止める）"""
+    url = base + "/app/?seconds=8"
+    ctx, page, errors = fresh_page(browser, base, 1280, "light")
+    page.goto(url)
+    t(page, "sample-care").click()
+    t(page, "step-6").click()
+    ok(t(page, "repair").is_disabled() and "まだ空" in t(page, "repair-why").inner_text(), "表が空のときは「エラーを自動で直す」を押せず、理由が出る")
+    t(page, "step-5").click()
+    t(page, "generate").click()
+    page.wait_for_selector('[data-testid="run-result"]', timeout=60000)
+    t(page, "step-6").click()
+
+    # 1. 案を探す → 並べる → 表で見る → 反映 → 元に戻す
+    before = stored(page)
+    t(page, "repair").click()
+    ok("10・25・50・全部" in t(page, "repair-confirm").inner_text(), "押すと、何をするかの説明が出る")
+    t(page, "repair-start").click()
+    page.wait_for_selector('[data-testid="repair-results"]', timeout=60000)
+    items = t(page, "repair-item")
+    ok(items.count() == 4, "上限 10・25・50・全部 の4つが並ぶ", str(items.count()))
+    ok(stored(page) == before, "案を探しても、いまの表は変わらない")
+    views = t(page, "repair-view")
+    if views.count():
+        views.first.click()
+        title = t(page, "repair-preview").locator("h2").inner_text()
+        n = int(title.split("変わるマス ")[1].split("か所")[0])
+        ok(page.locator(".grid-cell.is-proposed").count() == n, "案を見ると、変わるマスに点線の枠が付く（数が合う）", f"{page.locator('.grid-cell.is-proposed').count()} / {n}")
+        ok("→" in t(page, "repair-preview").inner_text() and "→" in t(page, "repair-changes").inner_text(), "件数の前後と、変わるマスの文が出る")
+        page.locator('[data-testid="table-cell"][data-row="0"][data-day="1"]').click()
+        ok(t(page, "preview-notice").count() >= 1 and t(page, "cell-picker").count() == 0 and stored(page) == before, "案を見ているあいだは、マスを変えられない")
+        look(page, "light 1280 手順6 案を見る", "step6-repair-preview-light-1280")
+        t(page, "repair-apply").click()
+        after = stored(page)
+        ok(after != before and "エラーを自動で直す" in t(page, "undo-status").inner_text(), "「この案にする」で反映され、元に戻すの履歴に入る")
+        changed = json.loads(after)
+        old = json.loads(before)
+        locked_same = all(
+            json.dumps(old["month"]["table"].get(pid, {}).get(day)) == json.dumps(changed["month"]["table"].get(pid, {}).get(day))
+            for pid, days in old["month"]["marks"].items() for day, m in days.items() if m.get("locked")
+        )
+        req_ok = all(
+            json.dumps(changed["month"]["table"].get(pid, {}).get(day)) == json.dumps(r)
+            for pid, days in old["month"]["requests"].items() for day, r in days.items()
+        )
+        ok(locked_same and req_ok, "固定したマスは変わらず、希望のマスは希望の値")
+        t(page, "undo").click()
+        ok(stored(page) == before, "元に戻すと、直す前と1文字も同じに（1回で戻る）")
+    else:
+        ok(t(page, "repair-none").count() == 1, "良くなる案が無いときは、そう書く")
+        t(page, "repair-results-close").click()
+
+    # 2. 必ず変えるマスが上限より多い表（希望と違うマス 6・担当外のシフト 6）
+    page.evaluate(
+        """() => {
+          const d = JSON.parse(localStorage.getItem('shift-maker:data'));
+          let n = 0;
+          for (const [pid, days] of Object.entries(d.month.requests)) {
+            for (const [day, r] of Object.entries(days)) {
+              if (n >= 6 || d.month.marks[pid]?.[day]?.locked) continue;
+              d.month.table[pid] ??= {};
+              d.month.table[pid][day] = r.kind === 'off' ? { kind: 'paid' } : { kind: 'off' };
+              n += 1;
+            }
+          }
+          let m = 0;
+          for (const p of d.staff) {
+            const o = d.settings.shifts.find((x) => !p.shifts.includes(x.id) && !x.night);
+            if (!o || m >= 6) continue;
+            for (const day of [2, 3]) {
+              if (m >= 6 || d.month.requests[p.id]?.[day] || d.month.marks[p.id]?.[day]?.locked) continue;
+              d.month.table[p.id] ??= {};
+              d.month.table[p.id][day] = { kind: 'shift', shift: o.id };
+              m += 1;
+            }
+          }
+          localStorage.setItem('shift-maker:data', JSON.stringify(d));
+        }"""
+    )
+    page.goto(url)
+    page.wait_for_selector('[data-testid="repair"]')
+    t(page, "repair").click()
+    t(page, "repair-start").click()
+    page.wait_for_selector('[data-testid="repair-results"]', timeout=60000)
+    first = page.locator('[data-testid="repair-item"][data-budget="10マスまで"]')
+    ok(first.get_attribute("data-status") == "too-many" and "この上限では直せませんでした" in first.inner_text(), "必ず変えるマスが上限より多いと「この上限では直せませんでした」と出る（エラーにならない）", first.inner_text()[:60])
+    ok(t(page, "repair-item").count() == 4, "ほかの上限も並ぶ")
+    t(page, "repair-results-close").click()
+    ok(not errors, "エラー0 エラーを自動で直す", " / ".join(errors[:3]))
+    ctx.close()
+
+    # 3. 途中から作り直す：選んだ日までは1文字も同じ・元に戻せる・残す日に担当外があれば止める
+    ctx, page, errors = fresh_page(browser, base, 375, "dark")
+    page.goto(url)
+    t(page, "sample-restaurant").click()
+    go(page, 5, 375)
+    t(page, "generate").click()
+    page.wait_for_selector('[data-testid="run-result"]', timeout=60000)
+    go(page, 6, 375)
+    before = stored(page)
+    page.locator('[data-testid="more-ops"] > summary').click()
+    t(page, "restart").click()
+    t(page, "restart-day").select_option("10")
+    t(page, "restart-dialog-ok").click()
+    page.wait_for_selector('[data-testid="restart-done"]', timeout=60000)
+    a, b = json.loads(before), json.loads(stored(page))
+    early_same = all(
+        json.dumps(a["month"]["table"].get(p["id"], {}).get(str(day))) == json.dumps(b["month"]["table"].get(p["id"], {}).get(str(day)))
+        for p in a["staff"] for day in range(1, 11)
+    )
+    ok(early_same and a["month"]["marks"] == b["month"]["marks"], "途中から作り直しても、選んだ日までのマスと固定の印は1文字も同じ")
+    ok(b["month"]["runs"][-1].get("mode") == "restart" and b["month"]["runs"][-1].get("fromDay") == 11, "作った記録に「途中から（11日から）」が残る")
+    t(page, "undo").click()
+    ok(stored(page) == before, "途中から作り直したのを元に戻すと、1文字も同じ")
+    page.evaluate(
+        """() => {
+          const d = JSON.parse(localStorage.getItem('shift-maker:data'));
+          const p = d.staff.find((x) => d.settings.shifts.some((s) => !x.shifts.includes(s.id)));
+          const o = d.settings.shifts.find((s) => !p.shifts.includes(s.id));
+          d.month.table[p.id] ??= {};
+          d.month.table[p.id][3] = { kind: 'shift', shift: o.id };
+          localStorage.setItem('shift-maker:data', JSON.stringify(d));
+        }"""
+    )
+    page.goto(url)
+    page.wait_for_selector('[data-testid="repair"]')
+    held = stored(page)
+    page.locator('[data-testid="more-ops"] > summary').click()
+    t(page, "restart").click()
+    t(page, "restart-day").select_option("10")
+    t(page, "restart-dialog-ok").click()
+    ok(t(page, "restart-blocked").count() == 1 and "担当外" in t(page, "restart-blocked").inner_text() and t(page, "run-dialog").count() == 0 and stored(page) == held, "残す日に担当外のシフトがあると、作り直す前に止めて、どのマスかを出す", t(page, "restart-blocked").inner_text()[:80] if t(page, "restart-blocked").count() else "")
+    look(page, "dark 375 手順6 途中から作り直す", "step6-restart-dark-375")
+    ok(not errors, "エラー0 途中から作り直す", " / ".join(errors[:3]))
+    ctx.close()
+
+
 def main():
     with Server() as srv, sync_playwright() as pw:
         base = f"http://127.0.0.1:{srv.port}"
@@ -1349,6 +1492,7 @@ def main():
         scenario_broken(browser, base)
         scenario_generate(browser, base)
         scenario_undo(browser, base)
+        scenario_repair(browser, base)
         browser.close()
     print(json.dumps({"ブラウザ": CHANNEL or "chromium", "合格": len(results["pass"]), "不合格": results["fail"]}, ensure_ascii=False, indent=2))
     sys.exit(1 if results["fail"] else 0)

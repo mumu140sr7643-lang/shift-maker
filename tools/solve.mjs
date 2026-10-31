@@ -1,6 +1,7 @@
 // 自動で作る（v3）を node で動かす道具。確かめ役も同じ条件で回せる。
 // 使い方:
-//   node tools/solve.mjs 保存したファイル.json [--nodes 2000] [--seed 1] [--time 60] [--out フォルダ] [--leader-weight 0.3] [--soft-warm on|off] [--soft-effort 1]
+//   node tools/solve.mjs 保存したファイル.json [--nodes 2000] [--seed 1] [--time 60] [--out フォルダ] [--leader-weight 0.3] [--soft-warm on|off] [--soft-effort 1] [--from-day 15]
+//   --from-day 15：途中から作り直す（4-2）。14日までのマスは、いまのまま残す（写しで固定と同じにして解く。できた表には固定の印を付けない）
 //   --nodes（調べる数の上限）で区切ると、同じデータ・同じ種なら、いつも同じ答えになる。
 //   --time で区切ると、画面と同じ（パソコンの速さで答えが変わる）。
 // --out に出すもの：stages.json（段ごとの結果）・result.json（できた表を入れたデータ。このアプリで取り込める）・
@@ -12,6 +13,7 @@ import { parseData } from '../app/js/storage.js';
 import { checkTable } from '../app/js/check.js';
 import { solveStaged } from '../app/js/solver/stages.js';
 import { canonicalJSON, clone } from '../app/js/model.js';
+import { prepareRestart } from '../app/js/solver/repair.js';
 import highsLoader from '../vendor/highs/highs.mjs';
 
 function arg(name, fallback = null) {
@@ -92,7 +94,14 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const nodes = arg('nodes') ? Number(arg('nodes')) : null;
   const time = arg('time') ? Number(arg('time')) : null;
   const soft = arg('soft-warm');
-  const res = await solveFile(r.data, { nodes: nodes ?? (time ? null : 2000), seed: Number(arg('seed', 1)), time, leaderWeight: Number(arg('leader-weight', 0)), presolve: arg('presolve', 'on'), softWarmStart: soft === null ? undefined : soft === 'on', softEffort: arg('soft-effort') === null ? undefined : Number(arg('soft-effort')) });
+  const fromDay = arg('from-day') ? Number(arg('from-day')) : null;
+  const res = await solveFile(fromDay ? prepareRestart(r.data, fromDay) : r.data, { nodes: nodes ?? (time ? null : 2000), seed: Number(arg('seed', 1)), time, leaderWeight: Number(arg('leader-weight', 0)), presolve: arg('presolve', 'on'), softWarmStart: soft === null ? undefined : soft === 'on', softEffort: arg('soft-effort') === null ? undefined : Number(arg('soft-effort')) });
+  if (fromDay && res.data) {
+    // 写しに付けた固定の印は、できた表には残さない
+    res.data.month.marks = clone(r.data.month.marks);
+    res.counted = checkTable(res.data);
+    res.compare = compareAmounts(res.solved, res.counted, res.data);
+  }
   const out = arg('out');
   if (out) {
     mkdirSync(out, { recursive: true });

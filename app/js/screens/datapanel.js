@@ -1,12 +1,12 @@
 // 「保存と控え」の小窓：ひとつ前の保存に戻す・控えから戻す・書き出す・リセット。
-import { h, append } from '../dom.js?v=4.1';
-import { app, replaceData, rerender } from '../state.js?v=4.1';
-import { prevSave, loadBackups, clearData, brokenCopy, MAX_BACKUPS } from '../storage.js?v=4.1';
-import { planBackup, takeBackup, backupLines, backupLabel, backupSummary } from '../backup.js?v=4.1';
-import { ask, notify, clearNotices } from '../dialog.js?v=4.1';
-import { exportData, exportRaw } from '../files.js?v=4.1';
-import { timeLabel } from '../calendar.js?v=4.1';
-import { importFromFile } from './importer.js?v=4.1';
+import { h, append } from '../dom.js?v=4.2';
+import { app, replaceData, rerender } from '../state.js?v=4.2';
+import { prevSave, loadBackups, clearData, brokenCopy, MAX_BACKUPS } from '../storage.js?v=4.2';
+import { planBackup, takeBackup, backupLines, backupLabel, backupSummary } from '../backup.js?v=4.2';
+import { ask, notify, clearNotices } from '../dialog.js?v=4.2';
+import { exportData, exportRaw } from '../files.js?v=4.2';
+import { timeLabel } from '../calendar.js?v=4.2';
+import { importFromFile } from './importer.js?v=4.2';
 
 const at = (iso) => (iso ? timeLabel(new Date(iso)) : '時刻不明');
 
