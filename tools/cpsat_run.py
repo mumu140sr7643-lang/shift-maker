@@ -192,7 +192,7 @@ class Model:
 
 
 def bound_of(model, b):
-    """{"objective": {c, t}, "max": 上限} → (整数の係数, 上限の整数)。上限が倍の細かさにほぼ乗っていれば、その値（小数の誤差を丸める）"""
+    """{"objective": {c, t}, "max": 上限} → (整数の係数, 上限の整数)。上限が倍の細かさにほぼ乗っていれば、その値（小数のずれを丸める）"""
     m, coefs, const = model.stage_objective(b['objective'])
     x = (Fraction(b['max']).limit_denominator(10 ** 6) - const) * m
     r = round(x)
