@@ -1,8 +1,8 @@
 // 見込みと説明（v5。docs/見込みと説明の案.md）の数え方。画面には触らない。node からも使う。
 // 5-1：その日に出られる人・あと何人休めるか（日ごとの余裕）・きつい期間・新しくできた 0 人の日ときつい期間。
-import { monthDays, cellOf, shiftById, needRows, needOn, clone, setRequest, setLock, setCellByHand, cellName } from './model.js?v=5.3';
-import { unavoidableErrors, checkTable } from './check.js?v=5.3';
-import { strengthOf, RULE_BY_ID } from './rules.js?v=5.3';
+import { monthDays, cellOf, shiftById, needRows, needOn, clone, setRequest, setLock, setCellByHand, cellName } from './model.js?v=6.1';
+import { unavoidableErrors, checkTable } from './check.js?v=6.1';
+import { strengthOf, RULE_BY_ID } from './rules.js?v=6.1';
 
 export const GROUPS = ['early', 'late', 'night'];
 

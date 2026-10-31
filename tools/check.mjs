@@ -22,6 +22,10 @@ import { summarize } from '../app/js/summary.js';
 import { csvCell, toCsv, shiftTableRows } from '../app/js/csv.js';
 import { dayMargins, tightRanges, newTightness, staffingTable, monthTotals, lowerBound, fixesFor, applyFix, reasonsFor } from '../app/js/outlook.js';
 import { checkFlow, checkMinimum } from './outlook-brute.mjs';
+import { finishTable, moveAllowed } from '../app/js/solver/finish.js';
+import { verifyFinish } from './finish.mjs';
+import { stressOne } from './finish-stress.mjs';
+import { messyMonth } from './repair-stress.mjs';
 
 const results = [];
 const check = (name, problems) => results.push({ name, problems });
@@ -824,6 +828,66 @@ const check = (name, problems) => results.push({ name, problems });
     if (!(additive > 0 && least === 0)) problems.push(`公休を削った日が人の多い日の例で、最大流の「少なくとも」が ${least}（0 のはず。足し算なら ${additive}）`);
   }
   check('最低◯件の見込み（見本・総当たり）・直し方のボタン・不足の理由・帯の下の数', problems);
+}
+
+// 21. 仕上げの入れ替え（finish.js）（6-1。docs/じっくり作る案.md の 3 章）
+{
+  const problems = [];
+  const two = (days, fields = {}) => {
+    const d = M.emptyData(2026, 11, 'blank');
+    const E = M.newShift(d, { symbol: '早', name: '早', group: 'early', combine: true, need: { full: 0, part: 0, all: 1 } });
+    d.settings.shifts = [E];
+    d.staff = ['A', 'B'].map((name) => M.newStaff(d, { name, shifts: [E.id], offDays: 15, ...fields }));
+    const [A, B] = d.staff;
+    for (let day = 1; day <= 30; day += 1) {
+      const aWorks = days(day);
+      (d.month.table[A.id] ??= {})[day] = aWorks ? { kind: 'shift', shift: E.id } : { kind: 'off' };
+      (d.month.table[B.id] ??= {})[day] = aWorks ? { kind: 'off' } : { kind: 'shift', shift: E.id };
+    }
+    return { d, E, A, B };
+  };
+  // 2人が1日おきに出る表：できれば が減る・変えないもの・固定と希望のマスはそのまま・6連勤以上を作らない・同じ表なら同じ答え
+  {
+    const { d, E, A, B } = two((day) => day % 2 === 1);
+    M.setLock(d, A.id, 1, true);
+    M.setRequest(d, B.id, 2, { kind: 'shift', shift: E.id });
+    const r = finishTable(d, { seconds: null });
+    if (!(r.after.soft < r.before.soft) || r.after.hard || r.after.sixPlus) problems.push(`1日おきの表で、できれば が減らない・絶対か6連勤以上がある（${JSON.stringify(r.before)} → ${JSON.stringify(r.after)}）`);
+    if (r.table[A.id][1].shift !== E.id || r.table[B.id][2].shift !== E.id) problems.push('固定・希望のマスが入れ替わった');
+    problems.push(...verifyFinish(d, r));
+    if (M.canonicalJSON(finishTable(d, { seconds: null }).table) !== M.canonicalJSON(r.table)) problems.push('同じ表をもう一度仕上げたら、答えが違った');
+  }
+  // 6連勤（1〜6日）の次の日に1日だけの休み：休みを動かすと続きがつながる。長くしない・つなげない（短くするのはよい）
+  {
+    const { d, A } = two((day) => day <= 6 || (day >= 8 && day <= 12) || (day >= 16 && day <= 19) || day === 25, { maxConsecutive: 20, offDays: 0 });
+    const r = finishTable(d, { seconds: null });
+    problems.push(...verifyFinish(d, r));
+    const runs = C.checkTable({ ...d, month: { ...d.month, table: r.table } }).items.filter((it) => it.rule === 'sixPlus' && it.staff === A.id);
+    if (runs.some((it) => it.from < 1 || it.to > 6)) problems.push(`6連勤以上が長くなった・つながった（${runs.map((it) => `${it.from}〜${it.to}`).join('、')}）`);
+  }
+  // 動かさないマス（夜勤・半休・明け・空き）と担当外は、入れ替えの候補にしない
+  {
+    const { d, E, A, B } = two((day) => day % 2 === 1);
+    const N = M.newShift(d, { symbol: '夜', name: '夜', group: 'night', night: true, combine: true, need: { full: 0, part: 0, all: 0 } });
+    A.shifts.push(N.id);
+    d.month.table[A.id][3] = { kind: 'shift', shift: N.id };
+    d.month.table[A.id][4] = { kind: 'ake' };
+    d.month.table[B.id][3] = { kind: 'shift', shift: E.id };
+    d.month.table[A.id][9] = { kind: 'half' };
+    delete d.month.table[A.id][11];
+    const refuse = [
+      ['夜勤', { kind: 'day', a: A.id, b: B.id, days: [3] }],
+      ['明け', { kind: 'cross', a: A.id, b: B.id, days: [4, 5] }],
+      ['半休', { kind: 'cross', a: A.id, b: B.id, days: [9, 10] }],
+      ['空き', { kind: 'cross', a: A.id, b: B.id, days: [11, 12] }],
+    ];
+    for (const [what, mv] of refuse) if (moveAllowed(d, mv)) problems.push(`${what}のマスを入れ替えの候補にした`);
+    B.shifts = [];
+    if (moveAllowed(d, { kind: 'cross', a: A.id, b: B.id, days: [1, 2] })) problems.push('担当外のシフトが入る入れ替えを候補にした');
+  }
+  // 乱数の手直しをした月（全部は tools/finish-stress.mjs）
+  for (let seed = 1; seed <= 4; seed += 1) problems.push(...stressOne(await messyMonth(seed), 400).problems.map((x) => `手直しの月 ${seed}：${x}`));
+  check('仕上げの入れ替え（変えないもの・動かさないマス・改善だけ・6連勤以上を作らない・同じ答え）', problems);
 }
 
 // 10. 言葉の確かめ：一覧の言葉が、リポジトリのファイル・コミットの文に入っていないか

@@ -1,17 +1,17 @@
 // 手順1 基本設定
-import { h, append, field, select, numberInput } from '../dom.js?v=5.3';
-import { app, commit, rerender } from '../state.js?v=5.3';
-import { clearHistory } from '../history.js?v=5.3';
+import { h, append, field, select, numberInput } from '../dom.js?v=6.1';
+import { app, commit, rerender } from '../state.js?v=6.1';
+import { clearHistory } from '../history.js?v=6.1';
 import {
   GROUP_IDS, LIMITS, newRank, newSkill, newSpecialDay, staffWithRank, removeRank, removeSkill,
   monthHasContent, switchMonth, monthDays, shiftById,
-} from '../model.js?v=5.3';
-import { monthLabel, weekdayOf, WEEKDAY_LABELS, isNextMonth } from '../calendar.js?v=5.3';
-import { ask, notify } from '../dialog.js?v=5.3';
-import { takeBackup, backupLines } from '../backup.js?v=5.3';
-import { exportData } from '../files.js?v=5.3';
-import { screenTitle, section, checkbox, textInput, warn } from './common.js?v=5.3';
-import { RULES, RULE_GROUPS, strengthOf, setStrength } from '../rules.js?v=5.3';
+} from '../model.js?v=6.1';
+import { monthLabel, weekdayOf, WEEKDAY_LABELS, isNextMonth } from '../calendar.js?v=6.1';
+import { ask, notify } from '../dialog.js?v=6.1';
+import { takeBackup, backupLines } from '../backup.js?v=6.1';
+import { exportData } from '../files.js?v=6.1';
+import { screenTitle, section, checkbox, textInput, warn } from './common.js?v=6.1';
+import { RULES, RULE_GROUPS, strengthOf, setStrength } from '../rules.js?v=6.1';
 
 function monthValue(y, m) {
   return `${y}-${String(m).padStart(2, '0')}`;

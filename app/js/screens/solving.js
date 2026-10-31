@@ -1,9 +1,9 @@
 // 計算中の小窓と、裏方（solver/worker.js の Web Worker）とのやり取り。
 // 手順5 の自動で作る・手順6 のエラーを自動で直す・途中から作り直す で同じものを使う。
 // 計算は写しで行うので、中止しても表は前のまま。計算中は小窓がほかの操作を止める。
-import { h } from '../dom.js?v=5.3';
-import { rerender } from '../state.js?v=5.3';
-import { notify } from '../dialog.js?v=5.3';
+import { h } from '../dom.js?v=6.1';
+import { rerender } from '../state.js?v=6.1';
+import { notify } from '../dialog.js?v=6.1';
 
 export const QUICK_SECONDS = 60;
 
@@ -57,7 +57,7 @@ export function startSolving({ payload, seconds, title, stageText = defaultStage
   if (job) return;
   let worker;
   try {
-    worker = new Worker(new URL('../solver/worker.js?v=5.3', import.meta.url), { type: 'module' });
+    worker = new Worker(new URL('../solver/worker.js?v=6.1', import.meta.url), { type: 'module' });
   } catch {
     notify('計算の部品を動かせませんでした。ページを読み込み直して、もう一度ためしてください。', { kind: 'error', testid: 'run-error' });
     return;

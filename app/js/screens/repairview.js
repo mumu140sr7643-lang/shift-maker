@@ -1,16 +1,16 @@
 // 手順6 の「エラーを自動で直す」と「途中から作り直す」（4-2。docs/自動で直す案.md）。
 // 直す：上限ごとの案を探して並べ、選んだ案を表で見せてから反映する。途中から：選んだ日までを残して、あとの日を作り直す。
 // どちらも計算は写しで行い（solving.js）、入れる前にデータが変わっていないか確かめ、元に戻すの履歴に1つで入れる。
-import { h, append, field, select } from '../dom.js?v=5.3';
-import { app, rerender, onReplaceData } from '../state.js?v=5.3';
-import { record } from '../history.js?v=5.3';
-import { canonicalJSON, clone, cellName, monthDays, applyCellChanges, addRun } from '../model.js?v=5.3';
-import { checkTable, solveConflicts } from '../check.js?v=5.3';
-import { RULE_BY_ID } from '../rules.js?v=5.3';
-import { ask, form, notify } from '../dialog.js?v=5.3';
-import { takeBackup, backupLines } from '../backup.js?v=5.3';
-import { prepareRepair, prepareRestart, tableChanges } from '../solver/repair.js?v=5.3';
-import { startSolving, isSolving, quickSeconds } from './solving.js?v=5.3';
+import { h, append, field, select } from '../dom.js?v=6.1';
+import { app, rerender, onReplaceData } from '../state.js?v=6.1';
+import { record } from '../history.js?v=6.1';
+import { canonicalJSON, clone, cellName, monthDays, applyCellChanges, addRun } from '../model.js?v=6.1';
+import { checkTable, solveConflicts } from '../check.js?v=6.1';
+import { RULE_BY_ID } from '../rules.js?v=6.1';
+import { ask, form, notify } from '../dialog.js?v=6.1';
+import { takeBackup, backupLines } from '../backup.js?v=6.1';
+import { prepareRepair, prepareRestart, tableChanges } from '../solver/repair.js?v=6.1';
+import { startSolving, isSolving, quickSeconds } from './solving.js?v=6.1';
 
 // 見ている案：{ baseText（探したときのデータ）, before（いまの件数）, proposal } | null
 let preview = null;
