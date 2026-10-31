@@ -1100,6 +1100,8 @@ def scenario_generate(browser, base):
     finished = t(page, "run-result").get_attribute("data-finished")
     all_solved = all(s["status"] == "solved" for s in data["month"]["runs"][-1]["stages"])
     ok((finished == "true") == all_solved and (("最後まで解ききりました" in status) == all_solved), "最後まで解ききったか・時間切れかが、段の記録と合う", status[:40])
+    unfinished = [x["name"] for x in data["month"]["runs"][-1]["stages"] if x["status"] != "solved"]
+    ok(all(n in status for n in unfinished), "時間切れ・前の段のままの段は、全部の名前を出す", f"{unfinished} / {status[:80]}")
     look(page, "light 1280 手順5 作った結果", "step5-result-light-1280")
 
     # 3. もう一度作ると、置きかえる前に確かめて控えを残す。控えから1文字も違わずに戻る

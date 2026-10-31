@@ -1,8 +1,8 @@
 // 決まりの検査と、良し悪しの比べ方（docs/数え方の表.md の 2 章・3 章）。
 // 画面には触らない。ブラウザでも node（tools/count.mjs）でも同じものを使う。
-import { RULES, strengthOf, cellTraits, isRestKind } from './rules.js?v=3.2';
-import { monthDays, shiftById, rankOrder, needOn, cellOf, cellName } from './model.js?v=3.2';
-import { weekdayOf } from './calendar.js?v=3.2';
+import { RULES, strengthOf, cellTraits, isRestKind } from './rules.js?v=3.3';
+import { monthDays, shiftById, rankOrder, needOn, cellOf, cellName } from './model.js?v=3.3';
+import { weekdayOf } from './calendar.js?v=3.3';
 
 const GROUP_IDS = ['early', 'late', 'night'];
 

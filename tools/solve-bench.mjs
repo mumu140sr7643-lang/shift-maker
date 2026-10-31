@@ -1,6 +1,6 @@
 // 自動で作るの速さと、決まりの式の試しを測る道具（作り物のデータだけ）。
 // 使い方:
-//   node tools/solve-bench.mjs --sizes [--time 60] [--cold | --warm] [--run 1]
+//   node tools/solve-bench.mjs --sizes [--time 60] [--cold | --warm] [--soft-warm] [--soft-effort 1] [--run 1]
 //       8・15・25・50人 × 28・30・31日 の作り物の月を、画面と同じ1分の区切りで作り、段ごとの秒と結果を出す
 //   node tools/solve-bench.mjs --leader [--nodes 30] [--weight 0.3]
 //       責任者の順位を近づける軽い式の試し：見本3つ × 種1・2・3 を、式あり・なしで作り、件数を比べる
@@ -30,14 +30,16 @@ mkdirSync('tools/out', { recursive: true });
 if (has('sizes')) {
   const time = arg('time', 60);
   const warmStart = has('cold') ? false : has('warm') ? true : undefined;
-  const tag = has('cold') ? '-cold' : has('warm') ? '-warm' : '';
+  const softWarmStart = has('soft-warm') ? true : undefined;
+  const softEffort = has('soft-effort') ? arg('soft-effort', 1) : undefined;
+  const tag = (has('cold') ? '-cold' : has('warm') ? '-warm' : '') + (has('soft-warm') ? '-softwarm' : '') + (softEffort !== undefined ? `-effort${softEffort}` : '');
   const run = arg('run', 1);
   const rows = [];
   for (const staff of [8, 15, 25, 50]) {
     for (const [year, month] of [[2027, 2], [2026, 11], [2026, 12]]) {
       const d = await makeSample({ seed: staff * 100 + month, staff, year, month });
       d.month.requests = {};
-      const r = await solveFile(d, { time, warmStart });
+      const r = await solveFile(d, { time, warmStart, softWarmStart, softEffort });
       const row = {
         staff,
         days: month === 2 ? 28 : month === 11 ? 30 : 31,

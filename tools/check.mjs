@@ -99,6 +99,13 @@ const check = (name, problems) => results.push({ name, problems });
       for (const p of d.staff) if (!/^[A-Z]$/.test(p.name)) problems.push(`${kind}: 見本の名前「${p.name}」が A〜Z ではありません`);
     }
   }
+  // 見本を変えたあと（v3-3）：前の版の見本のまま保存したデータは、同じ見本を選び直しても戻らないので、
+  // 「何も変えていない見本」と見なさない（リセットなどの前に控えを残す）。いまの見本は見なす
+  const oldCare = JSON.parse(readFileSync(join(ROOT, 'tools/fixtures/format1-care-2026-11.json'), 'utf8'));
+  if (S.isUntouchedSample(oldCare)) problems.push('前の版の見本のまま保存したデータを、何も変えていない見本と見なす（控えが作られない）');
+  for (const kind of ['restaurant', 'retail', 'care', 'blank']) {
+    if (!S.isUntouchedSample(JSON.parse(JSON.stringify(S.buildSample(kind, 2026, 11))))) problems.push(`いまの見本 ${kind} を、何も変えていない見本と見なさない`);
+  }
   check('業種の見本', problems);
 }
 
@@ -450,7 +457,7 @@ const check = (name, problems) => results.push({ name, problems });
   };
   const rules = (d) => C.requestConflicts(d).map((it) => it.rule);
   for (const kind of ['restaurant', 'retail', 'care', 'blank']) {
-    if (C.requestConflicts(S.buildSample(kind, 2026, 11)).length) problems.push(`見本 ${kind} で、希望が無いのに知らせが出る`);
+    if (C.requestConflicts(S.buildSample(kind, 2026, 11)).length) problems.push(`見本 ${kind} の希望の例で、知らせが出る（見本の希望は、作る前の確かめで止めない種類だけにする）`);
   }
   {
     const x = mk();
@@ -497,7 +504,11 @@ const check = (name, problems) => results.push({ name, problems });
   };
   const rules = (d) => C.solveConflicts(d).map((it) => it.rule);
   for (const kind of ['restaurant', 'retail', 'care', 'blank']) {
-    if (C.solveConflicts(S.buildSample(kind, 2026, 11)).length) problems.push(`見本 ${kind} で、固定も希望も無いのに知らせが出る`);
+    for (const [y, m] of [[2026, 11], [2027, 2], [2027, 7]]) {
+      const d = S.buildSample(kind, y, m);
+      if (C.solveConflicts(d).length) problems.push(`見本 ${kind} ${y}-${m} で、作る前に止める知らせが出る`);
+      if (C.unavoidableErrors(d).length) problems.push(`見本 ${kind} ${y}-${m} で、避けられないエラーが出る`);
+    }
   }
   {
     const x = mk();

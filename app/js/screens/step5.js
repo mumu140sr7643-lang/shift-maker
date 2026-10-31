@@ -1,15 +1,15 @@
 // 手順5 自動で作る：1分で作る（おためし）。計算は裏方（solver/worker.js の Web Worker）で行うので、画面は固まらない。
 // 計算は写しで行い、終わってから、そのあいだにデータが変わっていないことを確かめて本物の表に入れる。
-import { h, append } from '../dom.js?v=3.2';
-import { app, commit, rerender, goStep } from '../state.js?v=3.2';
-import { canonicalJSON, clone, applyGenerated } from '../model.js?v=3.2';
-import { checkTable, solveConflicts, unavoidableErrors } from '../check.js?v=3.2';
-import { RULE_BY_ID } from '../rules.js?v=3.2';
-import { ask, notify } from '../dialog.js?v=3.2';
-import { takeBackup, backupLines } from '../backup.js?v=3.2';
-import { timeLabel } from '../calendar.js?v=3.2';
-import { screenTitle } from './common.js?v=3.2';
-import { countBand } from './checkview.js?v=3.2';
+import { h, append } from '../dom.js?v=3.3';
+import { app, commit, rerender, goStep } from '../state.js?v=3.3';
+import { canonicalJSON, clone, applyGenerated } from '../model.js?v=3.3';
+import { checkTable, solveConflicts, unavoidableErrors } from '../check.js?v=3.3';
+import { RULE_BY_ID } from '../rules.js?v=3.3';
+import { ask, notify } from '../dialog.js?v=3.3';
+import { takeBackup, backupLines } from '../backup.js?v=3.3';
+import { timeLabel } from '../calendar.js?v=3.3';
+import { screenTitle } from './common.js?v=3.3';
+import { countBand } from './checkview.js?v=3.3';
 
 const QUICK_SECONDS = 60;
 
@@ -77,7 +77,7 @@ function run(d) {
   const seed = (d.month.runs.length % 1000) + 1;
   let worker;
   try {
-    worker = new Worker(new URL('../solver/worker.js?v=3.2', import.meta.url), { type: 'module' });
+    worker = new Worker(new URL('../solver/worker.js?v=3.3', import.meta.url), { type: 'module' });
   } catch {
     notify('計算の部品を動かせませんでした。ページを読み込み直して、もう一度ためしてください。', { kind: 'error', testid: 'run-error' });
     return;
@@ -248,11 +248,17 @@ function resultCard(d) {
   const at = new Date(r.at);
   const when = Number.isNaN(at.getTime()) ? '' : `${timeLabel(at)} に`;
   const stages = Array.isArray(r.stages) ? r.stages : [];
-  const firstLimit = stages.find((s) => s.status !== 'solved');
-  const kept = stages.filter((s) => s.status === 'kept');
+  const names = (status) => stages.filter((s) => s.status === status).map((s) => s.name);
+  const limited = names('limit');
+  const kept = names('kept');
+  // 時間切れの段があっても、あとの段は解いている。どの段がどうだったかを、全部の名前で書く
   const status = r.finished
     ? '最後まで解ききりました。決めた順番（6連勤以上 → 「絶対」の決まり → 「できれば」の決まり）で、これ以上良い答えは無いところまで確かめました。'
-    : `時間切れのため、時間内に見つけたいちばん良い答えを入れました（${firstLimit?.name ?? '「できれば」の決まり'}の段で止めました）。`;
+    : [
+        limited.length ? `時間内に最後まで確かめきれなかった段がありました（${limited.join('・')}）。その段は、時間内に見つけたいちばん良い答えです。` : '',
+        kept.length ? `${kept.join('・')}の段では、前の段より良い答えが時間内に見つからず、前の段の答えのままです。` : '',
+        names('solved').length ? 'ほかの段は最後まで解きました。' : '',
+      ].join('') || '時間内に見つけたいちばん良い答えです。';
   const res = checkTable(d);
   const edited = Object.values(d.month.marks).some((row) => Object.values(row).some((m) => m.edited));
   return h(
@@ -261,7 +267,6 @@ function resultCard(d) {
     h('h2', { text: '作った結果' }),
     h('p', { testid: 'run-when', text: `${when}「1分で作る」で作りました（${Math.round(Number(r.seconds) || 0)}秒）。` }),
     h('p', { testid: 'run-status', text: status }),
-    kept.length ? h('p', { class: 'help', text: `${kept.map((s) => s.name).join('・')}の段では、前の段より良い答えが時間内に見つからず、前の段の答えのままです。` }) : null,
     h('h3', { text: 'いまのシフト表の件数' }),
     countBand(res),
     edited ? h('p', { class: 'help', testid: 'run-edited', text: '作ったあとに手で変えたマスがあります。件数は、いまの表で数えています。' }) : null,

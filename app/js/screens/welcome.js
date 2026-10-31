@@ -1,11 +1,11 @@
 // 初めて開いたとき（とリセットのあと）の、業種の見本を選ぶ画面。
-import { h, append } from '../dom.js?v=3.2';
-import { SAMPLE_KINDS, buildSample } from '../samples.js?v=3.2';
-import { nextMonthOf, monthLabel } from '../calendar.js?v=3.2';
-import { replaceData } from '../state.js?v=3.2';
-import { screenTitle } from './common.js?v=3.2';
-import { backupList, restoreBackup } from './datapanel.js?v=3.2';
-import { importFromFile } from './importer.js?v=3.2';
+import { h, append } from '../dom.js?v=3.3';
+import { SAMPLE_KINDS, buildSample } from '../samples.js?v=3.3';
+import { nextMonthOf, monthLabel } from '../calendar.js?v=3.3';
+import { replaceData } from '../state.js?v=3.3';
+import { screenTitle } from './common.js?v=3.3';
+import { backupList, restoreBackup } from './datapanel.js?v=3.3';
+import { importFromFile } from './importer.js?v=3.3';
 
 function backupBox() {
   const list = backupList((b) => restoreBackup(b.id), 'welcome-backup-restore');

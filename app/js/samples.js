@@ -1,23 +1,24 @@
 // 業種の見本。スタッフはすべて作り物（A・B・C…）。
-// 「ちょうど良くきつい月」に合わせるのは、自動で作れるようになってから（v3）。
-import { emptyData, newRank, newSkill, newShift, newStaff, newSpecialDay, newId, canonicalJSON } from './model.js?v=3.2';
-import { daysInMonth } from './calendar.js?v=3.2';
+// 「ちょうど良くきつい月」（v3-3）：人には少し余裕を持たせ（希望が無ければ、どの月も「絶対」0）、
+// 希望の例を少し入れて、必ず起きる「絶対」を 1〜2件 作る。公休の数は月の日数に合わせる（CLAUDE.md の記録）。
+import { emptyData, newRank, newSkill, newShift, newStaff, newSpecialDay, newId, canonicalJSON, setRequest } from './model.js?v=3.3';
+import { daysInMonth } from './calendar.js?v=3.3';
 
 export const SAMPLE_KINDS = [
   {
     id: 'restaurant',
     name: '飲食店',
-    summary: '朝・昼・夜の3つのシフトと、朝・夜の時間帯責任者。週末は人数を増やします。',
+    summary: '朝・昼・夜の3つのシフトと、朝・夜の時間帯責任者。週末は人数を増やします。希望の例も入っています（10日は社員が3人とも休みの希望なので、時間帯責任者が足りなくなります）。',
   },
   {
     id: 'retail',
     name: '小売店',
-    summary: '早番・中番・遅番と売場責任者。セール日には役職者を多めに入れます。',
+    summary: '早番・中番・遅番と売場責任者。セール日には役職者を多めに入れます。希望の例も入っています（12日は店長と主任2人が休みの希望なので、売場責任者が足りなくなります）。',
   },
   {
     id: 'care',
     name: '介護施設',
-    summary: '早出・日勤・遅出・夜勤。夜勤の次の日は明け。資格のある人を時間帯ごとに1人以上。',
+    summary: '早出・日勤・遅出・夜勤。夜勤の次の日は明け。資格のある人を時間帯ごとに1人以上。希望の例も入っています（20日は夜勤のできる看護の人が全員休みの希望なので、夜に看護の人がいなくなります）。',
   },
   {
     id: 'blank',
@@ -33,8 +34,15 @@ function addRanks(d, names) {
   return d.settings.ranks.map((r) => r.id);
 }
 
+// 公休の数は、30日の月の数を書き、月の日数に合わせて増やす・減らす（いつも同じくらいの出勤日数にするため）
 function addStaff(d, list) {
-  list.forEach((p, i) => d.staff.push(newStaff(d, { name: LETTERS[i], ...p })));
+  const diff = daysInMonth(d.month.year, d.month.month) - 30;
+  list.forEach((p, i) => d.staff.push(newStaff(d, { name: LETTERS[i], ...p, offDays: Math.max(0, (p.offDays ?? 0) + diff) })));
+}
+
+// 希望の例：名前（A・B・C…）の人が、その日に休みの希望
+function requestOff(d, names, day) {
+  for (const name of names) setRequest(d, d.staff.find((p) => p.name === name).id, day, { kind: 'off' });
 }
 
 function restaurant(d) {
@@ -71,7 +79,10 @@ function restaurant(d) {
     { employment: 'part', rank: member, shifts: night, skills: [cook.id], offDays: 12, prevConsecutive: 3, prevLastShift: yoru.id },
     { employment: 'part', rank: member, shifts: [...day, ...night], skills: [cook.id, cash.id], offDays: 12, paidDays: 1 },
     { employment: 'part', rank: member, shifts: [hiru.id, yoru.id], skills: [], offDays: 13 },
+    { employment: 'part', rank: member, shifts: [...day, ...night], skills: [cook.id, cash.id], offDays: 12 },
   ]);
+  // 10日は社員3人とも休み → 朝・夜の時間帯責任者が足りない（人員不足 2件）
+  requestOff(d, ['A', 'B', 'C'], 10);
 }
 
 function retail(d) {
@@ -108,7 +119,10 @@ function retail(d) {
     { employment: 'part', rank: member, shifts: work, skills: [], offDays: 13, restStyle: 'spread' },
     { employment: 'part', rank: member, shifts: [naka.id, oso.id], skills: [shina.id], offDays: 12, paidDays: 2 },
     { employment: 'part', rank: member, shifts: work, skills: [reji.id], offDays: 14, weekendPref: 'off' },
+    { employment: 'full', rank: member, shifts: work, skills: [shina.id], offDays: 9 },
   ]);
+  // 12日は店長と主任2人が休み → 売場責任者が足りない（人員不足 1件）
+  requestOff(d, ['A', 'B', 'C'], 12);
 }
 
 function care(d) {
@@ -143,9 +157,22 @@ function care(d) {
     { employment: 'part', rank: member, shifts: [osode.id], skills: [], offDays: 12, groupPref: 'late' },
     { employment: 'part', rank: member, shifts: day, skills: [], offDays: 12, paidDays: 1 },
   ]);
+  // 20日は夜勤のできる看護の人が全員休み → 夜に看護の人がいない（スキル不足 1件）
+  requestOff(d, ['B', 'D', 'F', 'H', 'J'], 20);
 }
 
-const BUILDERS = { restaurant, retail, care, blank: () => {} };
+// 業種の見本に共通の勤務の決まり（手順1）。切り替えの上限と偏りを許す日数は、はじめの値より少しゆるくする
+function sampleWork(d) {
+  d.settings.work.maxSwitches = 4;
+  d.settings.work.biasAllowance = 5;
+}
+
+const BUILDERS = {
+  restaurant: (d) => { sampleWork(d); restaurant(d); },
+  retail: (d) => { sampleWork(d); retail(d); },
+  care: (d) => { sampleWork(d); care(d); },
+  blank: () => {},
+};
 
 // 見本を選んだまま、何も変えていないか（それなら消えても、同じ見本をいつでも選び直せる）
 export function isUntouchedSample(data) {

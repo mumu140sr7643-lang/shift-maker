@@ -1,6 +1,6 @@
 // 段階的に解く（docs/自動で作る案.md の 4・5 章）。HiGHS を読み込む関数を渡せば、ブラウザでも node でも同じに動く。
-import { buildModel } from './build.js?v=3.2';
-import { solveConflicts } from '../check.js?v=3.2';
+import { buildModel } from './build.js?v=3.3';
+import { solveConflicts } from '../check.js?v=3.3';
 
 // HiGHS の答えの状態の番号
 const OPTIMAL = 7;
@@ -12,6 +12,12 @@ const PRESOLVE_RULE_OFF = 1 << 9;
 // 前の段の答えを、次の段の「はじめの答え」として HiGHS に渡さない。渡すと、まだ良くできる段を「解ききった」と返すことがあった
 // （2026-10-31、tools/solve-bench.mjs --presolve の乱数の 120 か月で、渡すと まちがい 1、渡さないと 0）
 const WARM_START = false;
+// 「できれば」の段（いちばん最後の段）だけは、はじめの答えを渡し、HiGHS に答えを強めに探させる（mip_heuristic_effort 1。はじめの値は 0.05）。
+// 渡したときの「解ききった」は確かめられないので、「時間切れ」（limit）と同じに扱う。
+// 2026-10-31（3-3）確かめ役の決め方で測って採った：見本3つ × 12か月 × 60秒 3回・作り物 12通り × 3回で、絶対の件数（見本）と量（作り物）は増えず、
+// できれば の合計（3回の平均）が 7979 → 3732。20秒でも段1〜5 は解ききった（tools/compare-settings.mjs）
+const SOFT_WARM_START = true;
+const SOFT_OPTIONS = { mip_heuristic_effort: 1 };
 
 // 時間で区切るときの配分：段1 は合計の 1/6、段2〜5 は合わせて 1/2、残りを最後の段に
 function budgetFor(i, count, total, used) {
@@ -59,7 +65,7 @@ function runLp(highs, text, options, start) {
 //   reason: 'conflict'（解く前のぶつかり）| 'infeasible'（答えが無い）| 'no-answer'（段1で上限までに答えが無い）| 'stopped'（中止）
 export async function solveStaged(data, opts) {
   // maxStages・presolve・presolveRuleOff・warmStart は確かめの道具だけが変える（はじめの段だけ解く・前処理の不具合を調べる）
-  const { loadHighs, timeLimit = null, nodeLimit = null, seed = 1, leaderWeight = 0, onProgress = () => {}, shouldStop = () => false, maxStages = Infinity, presolve = 'on', presolveRuleOff = PRESOLVE_RULE_OFF, warmStart = WARM_START } = opts;
+  const { loadHighs, timeLimit = null, nodeLimit = null, seed = 1, leaderWeight = 0, onProgress = () => {}, shouldStop = () => false, maxStages = Infinity, presolve = 'on', presolveRuleOff = PRESOLVE_RULE_OFF, warmStart = WARM_START, softWarmStart = SOFT_WARM_START, softOptions = SOFT_OPTIONS } = opts;
   const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
   const conflicts = solveConflicts(data);
   if (conflicts.length) return { ok: false, reason: 'conflict', conflicts, stages: [] };
@@ -75,19 +81,21 @@ export async function solveStaged(data, opts) {
     if (presolveRuleOff) options.presolve_rule_off = presolveRuleOff;
     if (timeLimit) options.time_limit = budgetFor(i, model.stages.length, timeLimit, (now() - t0) / 1000);
     if (nodeLimit) options.mip_max_nodes = nodeLimit;
+    if (st.key === 'soft') Object.assign(options, softOptions);
     onProgress({ stage: i + 1, count: model.stages.length, name: st.name, phase: 'start', seconds: (now() - t0) / 1000 });
     const s0 = now();
     let res;
     let retried = false;
+    const warm = warmStart || (softWarmStart && st.key === 'soft');
     try {
       const text = model.lp(st.objective, bounds);
-      res = runLp(await loadHighs(), text, options, warmStart ? last : null);
+      res = runLp(await loadHighs(), text, options, warm ? last : null);
       // それでも「答えが無い」と出たときは、念のため前処理を止めて解き直して確かめる（上の PRESOLVE_RULE_OFF を見よ）
       if (INFEASIBLE.has(res.code) && options.presolve !== 'off') {
         retried = true;
         const again = { ...options, presolve: 'off' };
         if (timeLimit) again.time_limit = Math.max(1, timeLimit - (now() - t0) / 1000);
-        res = runLp(await loadHighs(), text, again, warmStart ? last : null);
+        res = runLp(await loadHighs(), text, again, warm ? last : null);
       }
     } catch (e) {
       res = { code: -1, objective: Infinity, values: null, error: String(e?.message ?? e) };
@@ -103,7 +111,7 @@ export async function solveStaged(data, opts) {
     if (after !== null && (before === null || after <= before + 1e-6)) {
       last = res.values;
       value = after;
-      status = res.code === OPTIMAL ? 'solved' : 'limit';
+      status = res.code === OPTIMAL && !(warm && !warmStart) ? 'solved' : 'limit';
     } else if (last) {
       value = before;
       status = 'kept';

@@ -1,6 +1,6 @@
 // 自動で作る（v3）を node で動かす道具。確かめ役も同じ条件で回せる。
 // 使い方:
-//   node tools/solve.mjs 保存したファイル.json [--nodes 2000] [--seed 1] [--time 60] [--out フォルダ] [--leader-weight 0.3]
+//   node tools/solve.mjs 保存したファイル.json [--nodes 2000] [--seed 1] [--time 60] [--out フォルダ] [--leader-weight 0.3] [--soft-warm on|off] [--soft-effort 1]
 //   --nodes（調べる数の上限）で区切ると、同じデータ・同じ種なら、いつも同じ答えになる。
 //   --time で区切ると、画面と同じ（パソコンの速さで答えが変わる）。
 // --out に出すもの：stages.json（段ごとの結果）・result.json（できた表を入れたデータ。このアプリで取り込める）・
@@ -59,7 +59,7 @@ export function compareAmounts(solved, counted, data) {
   return { exact, approx };
 }
 
-export async function solveFile(data, { nodes = null, seed = 1, time = null, leaderWeight = 0, presolve = 'on', warmStart } = {}) {
+export async function solveFile(data, { nodes = null, seed = 1, time = null, leaderWeight = 0, presolve = 'on', warmStart, softWarmStart, softEffort } = {}) {
   const solved = await solveStaged(data, {
     loadHighs: () => highsLoader(),
     nodeLimit: nodes,
@@ -68,6 +68,8 @@ export async function solveFile(data, { nodes = null, seed = 1, time = null, lea
     leaderWeight,
     presolve,
     ...(warmStart === undefined ? {} : { warmStart }),
+    ...(softWarmStart === undefined ? {} : { softWarmStart }),
+    ...(softEffort === undefined ? {} : { softOptions: { mip_heuristic_effort: softEffort } }),
   });
   if (!solved.ok) return { solved };
   const out = clone(data);
@@ -89,7 +91,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   }
   const nodes = arg('nodes') ? Number(arg('nodes')) : null;
   const time = arg('time') ? Number(arg('time')) : null;
-  const res = await solveFile(r.data, { nodes: nodes ?? (time ? null : 2000), seed: Number(arg('seed', 1)), time, leaderWeight: Number(arg('leader-weight', 0)), presolve: arg('presolve', 'on') });
+  const soft = arg('soft-warm');
+  const res = await solveFile(r.data, { nodes: nodes ?? (time ? null : 2000), seed: Number(arg('seed', 1)), time, leaderWeight: Number(arg('leader-weight', 0)), presolve: arg('presolve', 'on'), softWarmStart: soft === null ? undefined : soft === 'on', softEffort: arg('soft-effort') === null ? undefined : Number(arg('soft-effort')) });
   const out = arg('out');
   if (out) {
     mkdirSync(out, { recursive: true });
